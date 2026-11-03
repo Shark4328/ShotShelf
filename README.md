@@ -1,28 +1,33 @@
 <p align="center">
-  <img src="src/assets/PicRope.png" width="76" height="76" alt="图绳 Logo">
+  <img src="src/assets/ShotShelf.png" width="76" height="76" alt="ShotShelf 图架 Logo">
 </p>
 
-<h1 align="center">PicRope · 图绳</h1>
+<p align="center">ShotShelf is a lightweight Windows screenshot shelf for capturing, pinning, and reusing images.</p>
+
+<h1 align="center">ShotShelf · 图架</h1>
 
 <p align="center">Windows 截图暂存与桌面贴图工具</p>
 
 <p align="center">
-  <a href="https://github.com/Renly1994/PicRope/releases/latest"><img src="https://img.shields.io/github/v/release/Renly1994/PicRope?style=flat-square&amp;label=release&amp;color=2563eb" alt="最新版本"></a>
+  <a href="https://github.com/Shark4328/ShotShelf/releases/latest"><img src="https://img.shields.io/github/v/release/Shark4328/ShotShelf?style=flat-square&amp;label=release&amp;color=2563eb" alt="最新版本"></a>
+  <a href="https://github.com/Shark4328/ShotShelf/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/Shark4328/ShotShelf/ci.yml?branch=main&amp;style=flat-square&amp;label=CI" alt="构建状态"></a>
   <img src="https://img.shields.io/badge/Windows-10%20%2F%2011-0078d4?style=flat-square" alt="Windows 10 和 11">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-475569?style=flat-square" alt="MIT 许可"></a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/Renly1994/PicRope/releases/latest"><strong>下载 Windows 版</strong></a>
+  <a href="https://github.com/Shark4328/ShotShelf/releases/latest"><strong>下载 Windows 版</strong></a>
   · <a href="#功能">功能</a>
   · <a href="#开始使用">开始使用</a>
   · <a href="#常见问题">常见问题</a>
-  · <a href="https://github.com/Renly1994/PicRope/issues">反馈</a>
+  · <a href="https://github.com/Shark4328/ShotShelf/issues">反馈</a>
 </p>
 
-![图绳界面拼图：屏幕上沿的截图绳、文字信封、图片篮子与桌面贴图，图片内容为示例](docs/assets/overview-windows.png)
+![ShotShelf 界面拼图：屏幕上沿的截图绳、文字信封、图片篮子与桌面贴图，图片内容为示例](docs/assets/overview-windows.png)
 
-PicRope 将截图暂存在屏幕上沿，单击复制、拖拽取用，也可以取下图片，钉在桌面上对照。鼠标移到顶部展开，离开后自动收起，适合写文档、做教程和整理参考图。
+ShotShelf 把截图暂存在屏幕上沿，单击复制、拖拽取用，也可以取下图片钉在桌面上对照。鼠标移到顶部展开，离开后自动收起，适合写文档、做教程和整理参考图。
+
+这是面向 Windows 的独立社区版本，使用独立的名称与图标，不代表 Tendedero、PicRope 或其作者。
 
 ## 功能
 
@@ -38,11 +43,13 @@ PicRope 将截图暂存在屏幕上沿，单击复制、拖拽取用，也可以
 
 ## 开始使用
 
-1. 从 [Releases 下载最新版](https://github.com/Renly1994/PicRope/releases/latest)，完整解压后运行 `Install.cmd`。
-2. 启动图绳，用 `Win+PrtScn` 截图。保存到 Windows 截图文件夹的新图片会自动挂上。
+1. 从 [Releases 下载最新版](https://github.com/Shark4328/ShotShelf/releases/latest)，完整解压后运行 `Install.cmd`。
+2. 启动 ShotShelf，用 `Win+PrtScn` 截图。保存到 Windows 截图文件夹的新图片会自动挂上。
 3. 将鼠标移到屏幕上沿展开绳子，单击图片复制，或拖拽到需要的应用。
 
 **系统要求：** Windows 10 / 11 64 位、.NET Framework 4.8；内置编辑器需要 [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/)。
+
+安装程序不签名，首次运行时 Windows SmartScreen 可能显示提示。下载后可用同一 Release 中的 `.sha256` 文件核对安装包。
 
 > 使用 `Win+Shift+S`、`PrtScn` 或微信 `Alt+A` 时，在托盘右键菜单 →「剪贴板收集」中开启「图片」。图片与文字的剪贴板收集独立控制，默认都关闭。
 
@@ -80,9 +87,9 @@ PicRope 将截图暂存在屏幕上沿，单击复制、拖拽取用，也可以
 
 ### 图片篮子
 
-在「待挂」与「全部」之间切换，多选图片后批量挂上绳子。
+在「待挂」与「全部」之间切换，多选图片后批量挂上绳子，也可以一次导出所选或全部图片。
 
-![图片篮子：图片多选、大图预览、批量挂图](docs/assets/basket-preview-windows.png)
+![图片篮子：图片多选、大图预览、批量挂图与导出菜单](docs/assets/basket-preview-windows.png)
 
 ### 桌面贴图与文字信封
 
@@ -104,7 +111,7 @@ PicRope 将截图暂存在屏幕上沿，单击复制、拖拽取用，也可以
 
 经典银灰、棉麻木夹、奶白轻盈、柔彩日常、石墨金属。绳子、夹子、篮子和信封同步切换。
 
-![图绳五套外观的实际界面局部](docs/assets/themes-windows.png)
+![ShotShelf 五套外观的实际界面局部](docs/assets/themes-windows.png)
 
 </details>
 
@@ -122,7 +129,9 @@ PicRope 将截图暂存在屏幕上沿，单击复制、拖拽取用，也可以
 <details>
 <summary>图片和文字保存在哪里？</summary>
 
-设置、收集副本和文字记录保存在程序旁的 `data` 文件夹，重启后仍可取用。截图与编辑内容在本机处理，无需上传。自动清理只处理 `data\Captures` 中由 PicRope 保存的截图副本，启动后、每小时以及新截图落盘后各检查一次；达到保留期限或存储阈值的旧文件会被永久删除，跳过当前挂图、篮子中正在使用的内容和外部原图。无法安全降到阈值时会保留剩余文件，并最多每天提示一次。
+安装版的设置、收集副本和文字记录保存在 `%LOCALAPPDATA%\Programs\ShotShelf\data`；直接运行解压目录时则保存在程序旁的 `data` 文件夹。截图与编辑内容在本机处理，无需上传。自动清理只处理 `data\Captures` 中由 ShotShelf 保存的截图副本，启动后、每小时以及新截图落盘后各检查一次；达到保留期限或存储阈值的旧文件会被永久删除，跳过当前挂图、篮子中正在使用的内容和外部原图。无法安全降到阈值时会保留剩余文件，并最多每天提示一次。
+
+ShotShelf 与 PicRope 使用不同的安装目录和数据目录，可以并存，也不会读取或导入旧版数据。
 
 绳子保留最近 50 张图片的展示记录，超出的图片仍保留在篮子和本地。文字收集关闭后保留已有记录，相同内容不会重复收集。
 
@@ -133,7 +142,7 @@ PicRope 将截图暂存在屏幕上沿，单击复制、拖拽取用，也可以
 <details>
 <summary>「取下放篮子」和删除有什么区别？</summary>
 
-「取下放篮子」保留本地文件和收集记录，可以重新挂回。删除图绳收集的副本时，副本会移到回收站；对于截图文件夹及旧版记录中的外部图片，删除只移除图绳记录，保留原文件。编辑外部图片时会先创建副本。
+「取下放篮子」保留本地文件和收集记录，可以重新挂回。删除 ShotShelf 收集的副本时，副本会移到回收站；对于截图文件夹及旧版记录中的外部图片，删除只移除 ShotShelf 记录，保留原文件。编辑外部图片时会先创建副本。
 
 托盘「更多操作」中的「全部取下」保留所有原文件。删除文字只移除选中的文字记录。
 
@@ -151,23 +160,29 @@ PicRope 将截图暂存在屏幕上沿，单击复制、拖拽取用，也可以
 <details>
 <summary>如何更新和卸载？</summary>
 
-1.1.0 起支持应用内更新。托盘右键 →「更多操作」→「检查更新」，下载安装后重启，保留图片、设置和开机启动。1.3.0 新增更流畅的区域截图、图片篮子批量导出和自动清理；1.0.0 用户需先手动安装一次支持更新的版本。
+托盘右键 →「更多操作」→「检查更新」。下载安装后程序重启，图片、设置和开机启动保持不变。程序启动后及运行期间也会检查本仓库 GitHub Releases 的正式版，并通过系统通知提醒。更新文件经过大小、SHA256 和程序版本校验；取消或下载失败不影响当前程序，安装替换失败会恢复旧文件。
 
-程序启动后及运行期间也会检查本仓库 GitHub Releases 的正式版，并通过系统通知提醒。更新文件经过大小、SHA256 和程序版本校验；取消或下载失败不影响当前程序，安装替换失败会恢复旧文件。
-
-可从 Windows「已安装的应用」中卸载，卸载会清理图绳收集的副本、设置和缓存。
+可从 Windows「已安装的应用」中卸载，卸载会清理 ShotShelf 收集的副本、设置和缓存。
 
 </details>
 
 ## 开发
 
-Windows 版本使用 C# 与 WPF。在 PowerShell 中执行：
+Windows 版本使用 C# 与 WPF，直接调用 .NET Framework 4.8 编译器构建。在 PowerShell 中执行：
 
 ```powershell
 .\build.ps1
 ```
 
-构建自动清理七天以前的生成测试数据。运行 `./tests/CleanArtifacts.ps1 -KeepDays 0` 可即时清理测试数据，不涉及用户截图、设置和安装备份。
+核心测试会在普通构建后执行。专项验证可按需运行：
+
+```powershell
+.\build.ps1 -UpdateTests
+.\build.ps1 -ReleaseTests
+.\build.ps1 -BasketLayoutTests
+.\build.ps1 -DesktopTests
+.\tests\CaptureWindowTests.ps1
+```
 
 生成发布包：
 
@@ -175,17 +190,21 @@ Windows 版本使用 C# 与 WPF。在 PowerShell 中执行：
 .\build.ps1 -Package
 ```
 
+构建自动清理七天以前的生成测试数据。运行 `./tests/CleanArtifacts.ps1 -KeepDays 0` 可即时清理测试数据，不涉及用户截图、设置和安装备份。
+
 <details>
 <summary>发布与应用内更新</summary>
 
-将生成的 `PicRope-版本号-windows-x64.zip` 上传至对应的 `v版本号` 正式 Release，并设为最新版本。发布草稿、预发布版及源码包不会触发自动升级。
+推送 `v版本号` 标签后，`.github/workflows/release.yml` 会在 Windows runner 上构建、验证程序版本和资产哈希，并创建非草稿、非预发布的 GitHub Release。资产名为 `ShotShelf-版本号-windows-x64.zip` 与同名 `.sha256`，发布说明取自 `docs/releases/v标签.md`。
+
+应用内更新只接受正式 Release 中名称完全匹配、带有效 `sha256:` digest 的安装包。发布草稿、预发布版及源码包不会触发自动升级。
 
 </details>
 
 ## 许可与致谢
 
-图绳是 [Tendedero](https://github.com/alejandrobujan/tendedero) 的独立 Windows 社区移植版本，使用独立名称与图标，不代表上游项目。
+ShotShelf 源自 [Tendedero](https://github.com/alejandrobujan/tendedero)，经由 [Renly1994/PicRope](https://github.com/Renly1994/PicRope) 的 Windows 移植版继续开发。ShotShelf 使用独立名称、图标和安装标识，是独立社区版本，不代表上游项目，也未获得上游作者背书。
 
-许可、名称与图标条款及来源声明见 [LICENSE](LICENSE) 和 [NOTICE](NOTICE)。第三方许可随安装包提供。
+上游代码版权归 Alejandro Buján 所有；ShotShelf 的品牌、图标与新增代码版权归 Shark4328 所有。许可、名称与图标条款及来源声明见 [LICENSE](LICENSE) 和 [NOTICE](NOTICE)。第三方许可随安装包提供。
 
 展示图背景采用微软发布的 [Windows 11 Bloom 壁纸](https://blogs.windows.com/windowsexperience/2021/10/06/windows-11-blossoms-with-bloom-a-new-symbol-for-a-new-operating-system/)，版权归 Microsoft 所有。

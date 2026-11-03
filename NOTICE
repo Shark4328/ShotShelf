@@ -1,15 +1,27 @@
-PicRope · 图绳
+ShotShelf · 图架
 
-本项目以 Tendedero 为上游进行 Windows 移植：
-https://github.com/alejandrobujan/tendedero
-上游参考版本：db65d2ea84ba5120b4ed90acce2b457d4ad18c4b
+ShotShelf 是一个独立的 Windows 社区版本，来源为：
 
-原版权声明：Copyright (c) 2026 Alejandro Buján
-完整 MIT 许可及上游名称、图标条款见 LICENSE。
+  Tendedero -> PicRope Windows 移植版 -> ShotShelf
+
+上游项目与参考版本：
+
+  Tendedero
+  https://github.com/alejandrobujan/tendedero
+  参考提交：db65d2ea84ba5120b4ed90acce2b457d4ad18c4b
+
+  PicRope
+  https://github.com/Renly1994/PicRope
+
+原始代码版权：Copyright (c) 2026 Alejandro Buján
+原始 PicRope Windows 移植版版权归其相应贡献者所有。
+
+ShotShelf 的名称、图标、安装标识及新增代码：Copyright (c) 2026 Shark4328
+ShotShelf 图标是专为本项目绘制的原创作品，不复用 Tendedero 或 PicRope 的图标素材。
+
+ShotShelf 使用独立名称与图标，不代表 Tendedero、PicRope 或上游作者，也未获得其背书。完整 MIT 许可与上游名称、图标条款见 LICENSE。
 
 Windows 实现使用 C#、WPF 和 Windows 系统接口。
-本项目是独立社区移植版本，不代表上游项目，未获得上游作者背书。
-英文名称为 PicRope，中文名称为「图绳」，使用独立设计的奶白木夹图标。
 
 内置图片编辑器：Filerobot Image Editor 4.9.1
 https://github.com/scaleflex/filerobot-image-editor
