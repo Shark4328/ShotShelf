@@ -96,12 +96,12 @@ namespace ScreenLine
             Frame.MouseLeftButtonDown += delegate(object sender, MouseButtonEventArgs e)
             {
                 e.Handled = true;
-                moving = true;
+                if (!Frame.CaptureMouse()) return;
                 var cursor = WindowsNative.Cursor();
                 moveStart = new Point(cursor.X, cursor.Y);
                 anchorStart = anchor;
+                moving = true;
                 LiftPin(true);
-                Frame.CaptureMouse();
             };
             Frame.MouseMove += delegate
             {

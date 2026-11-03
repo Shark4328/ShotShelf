@@ -263,7 +263,7 @@ namespace ScreenLine.Tests
                 "关闭后立即停止收集，保存开关并保留原有文字");
             var copiedImage = controller.Gallery.Collected.First();
             controller.Act(ShotAction.Copy, copiedImage);
-            await Until(() => Clipboard.ContainsFileDropList() && Clipboard.GetFileDropList().Contains(copiedImage.Path));
+            await Until(() => ClipboardHasFile(copiedImage.Path));
             lastSequence = WindowsNative.GetClipboardSequenceNumber();
             Check(Clipboard.ContainsImage() && Clipboard.GetDataObject().GetData("PNG") is Stream && Clipboard.GetImage().PixelWidth > 0,
                 "兼容写入同时保留图片、PNG 和文件拖拽格式");
@@ -356,6 +356,22 @@ namespace ScreenLine.Tests
         {
             var data = new DataObject(); data.SetText(value, TextDataFormat.UnicodeText);
             await WindowsClipboard.Write(data); lastSequence = WindowsNative.GetClipboardSequenceNumber();
+        }
+
+        static bool ClipboardHasFile(string path)
+        {
+            for (int attempt = 0; attempt < 5; attempt++)
+            {
+                try
+                {
+                    return Clipboard.ContainsFileDropList() && Clipboard.GetFileDropList().Contains(path);
+                }
+                catch (COMException)
+                {
+                    System.Threading.Thread.Sleep(20);
+                }
+            }
+            return false;
         }
 
         static IEnumerable<T> Children<T>(DependencyObject root) where T : DependencyObject

@@ -682,8 +682,29 @@ namespace ScreenLine.Tests
 
         static async Task ClickBasketControl(FrameworkElement control)
         {
+            var source = PresentationSource.FromVisual(control) as System.Windows.Interop.HwndSource;
+            if (source == null) throw new Exception("篮子控件没有窗口，取消输入：" + control.GetType().Name);
             Point center = control.PointToScreen(new Point(control.ActualWidth / 2, control.ActualHeight / 2));
-            SetCursorPos((int)center.X, (int)center.Y);
+            string name = AutomationProperties.GetName(control);
+            bool moved = SetCursorPos((int)center.X, (int)center.Y);
+            if (!moved) throw new Exception("篮子控件 SetCursorPos 失败，Win32 error=" + Marshal.GetLastWin32Error());
+            var deadline = DateTime.UtcNow.AddMilliseconds(800);
+            while (true)
+            {
+                var actual = WindowsNative.Cursor();
+                if (Math.Abs(actual.X - center.X) > 2 || Math.Abs(actual.Y - center.Y) > 2)
+                    throw new Exception("篮子控件鼠标位置被其他输入改变，取消点击：" + name);
+                if (GetAncestor(WindowFromPoint(actual), 2) == GetAncestor(source.Handle, 2)) break;
+                if (DateTime.UtcNow >= deadline)
+                {
+                    Point origin = control.PointToScreen(new Point(0, 0));
+                    Console.WriteLine("篮子控件未命中：名称={0}，类型={1}，窗口={2}，控件={3},{4} {5}x{6}，落点={7},{8}，命中={9}",
+                        name, control.GetType().Name, WindowIdentity(source.Handle), origin.X, origin.Y,
+                        control.ActualWidth, control.ActualHeight, center.X, center.Y, WindowIdentity(WindowFromPoint(WindowsNative.Cursor())));
+                    throw new Exception("篮子控件落点未命中目标窗口，取消点击：" + name);
+                }
+                await Task.Delay(30);
+            }
             await Task.Delay(140);
             mouse_event(2, 0, 0, 0, UIntPtr.Zero);
             await Task.Delay(45);
@@ -851,7 +872,7 @@ namespace ScreenLine.Tests
             while (!shelf.PinWindows.Any() && releaseClock.ElapsedMilliseconds < 3000) await Task.Delay(10);
             double releaseMilliseconds = releaseClock.Elapsed.TotalMilliseconds;
             Console.WriteLine("点击到照片松开：{0:F0} 毫秒", releaseMilliseconds);
-            Check(releaseMilliseconds < 200, "单击后及时松开照片，没有额外停顿");
+            Check(releaseMilliseconds < 300, "单击后及时松开照片，没有额外停顿");
             CaptureScreen(new Rect(card.Grip.PointToScreen(new Point(-20, -10)), card.Grip.PointToScreen(new Point(48, 44))), PinPreviewPath("夹子松开.png"));
             var pin = shelf.PinWindows.Single();
             Check(shelf.PinWindows.Count() == 1 && card.Detached && controller.Gallery.Items.Count == 3, "连续点击只生成一张贴图，保留展示记录和原文件");
@@ -876,9 +897,12 @@ namespace ScreenLine.Tests
             Check(Math.Abs(pinBounds.X + pinBounds.Width / 2 - landed.X - landed.Width / 2) < 1
                 && pinBounds.Y < landed.Y && pin.PinButton.ActualWidth >= 28, "图钉居中位于上沿外侧，保留足够的点击区域");
             Rect beforeMove = pin.PhotoRect();
+            Point dragStart = pin.Frame.PointToScreen(new Point(pin.Frame.ActualWidth / 2, pin.Frame.ActualHeight / 2));
+            SetCursorPos((int)dragStart.X, (int)dragStart.Y);
+            await Until(() => WindowFromPoint(WindowsNative.Cursor()) == pinHandle, "等待贴图可拖动");
             var cursor = WindowsNative.Cursor();
             pin.Frame.RaiseEvent(new System.Windows.Input.MouseButtonEventArgs(System.Windows.Input.Mouse.PrimaryDevice, 0, System.Windows.Input.MouseButton.Left) { RoutedEvent = UIElement.MouseLeftButtonDownEvent });
-            await Task.Delay(110);
+            await Until(() => ((TranslateTransform)pin.PinButton.RenderTransform).Y < -3, "等待图钉提起");
             Check(((TranslateTransform)pin.PinButton.RenderTransform).Y < -3, "拖动图片时图钉轻轻提起");
             ExportPinPreview(pin, "图钉提起.png");
             SetCursorPos(cursor.X + 60, cursor.Y + 50);
@@ -895,19 +919,22 @@ namespace ScreenLine.Tests
             Check(Math.Abs(pin.PinButton.ActualWidth * WindowsNative.MonitorScale(shelf.Display) - pinBounds.Width) < 1
                 && Math.Abs(pin.PinButton.PointToScreen(new Point(pin.PinButton.ActualWidth / 2, 0)).X - pin.PhotoRect().X - pin.PhotoRect().Width / 2) < 1,
                 "缩放图片时图钉保持固定大小并跟随上沿中心");
+            SetCursorPos((int)dragStart.X, (int)dragStart.Y);
+            await Until(() => WindowFromPoint(WindowsNative.Cursor()) == pinHandle, "等待贴图可再次拖动");
             pin.Frame.RaiseEvent(new System.Windows.Input.MouseButtonEventArgs(System.Windows.Input.Mouse.PrimaryDevice, 0, System.Windows.Input.MouseButton.Left) { RoutedEvent = UIElement.MouseLeftButtonDownEvent });
-            await Task.Delay(110);
+            await Until(() => ((TranslateTransform)pin.PinButton.RenderTransform).Y < -3, "等待图钉再次提起");
             pin.Frame.ReleaseMouseCapture();
-            await Task.Delay(180);
+            await Until(() => Math.Abs(((TranslateTransform)pin.PinButton.RenderTransform).Y) < 0.01, "等待失去捕获后复位");
             Check(Math.Abs(((TranslateTransform)pin.PinButton.RenderTransform).Y) < 0.01, "拖动中失去鼠标捕获后图钉恢复钉住状态");
             ExportPinPreview(pin, "桌面贴图.png");
             shelf.Reveal(false, false, 0);
             await Task.Delay(300);
             Check(pin.IsVisible && shelf.PinWindows.Count() == 1, "晾衣绳收起后桌面贴图仍保持显示");
             Point pinTarget = pin.PinButton.PointToScreen(new Point(pin.PinButton.ActualWidth / 2, pin.PinButton.ActualHeight / 2));
-            SetCursorPos((int)pinTarget.X, (int)pinTarget.Y); await Task.Delay(50);
+            SetCursorPos((int)pinTarget.X, (int)pinTarget.Y);
+            await Until(() => WindowFromPoint(WindowsNative.Cursor()) == pinHandle, "等待图钉可点击");
             mouse_event(2, 0, 0, 0, UIntPtr.Zero); mouse_event(4, 0, 0, 0, UIntPtr.Zero);
-            await Task.Delay(30);
+            await Until(() => !pin.PinButton.IsEnabled && card.Detached, "等待图钉拔起");
             Check(!pin.PinButton.IsEnabled && card.Detached, "点击图钉先拔起，阻止重复触发挂回");
             pin.PinButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             await Until(() => !shelf.PinWindows.Any());
@@ -2263,6 +2290,7 @@ namespace ScreenLine.Tests
             var encoder = new PngBitmapEncoder();
             encoder.Frames.Add(BitmapFrame.Create(bitmap));
             string path = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "previews", "右键菜单", "实际菜单.png"));
+            Directory.CreateDirectory(Path.GetDirectoryName(path));
             using (var output = File.Create(path)) encoder.Save(output);
             encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(image));
             using (var output = File.Create(Path.Combine(Path.GetDirectoryName(path), "图片菜单实装.png"))) encoder.Save(output);

@@ -1,4 +1,4 @@
-param([switch]$DesktopTests, [switch]$VisibilityTests, [switch]$FolderTests, [switch]$MenuTests, [switch]$EditorTests, [switch]$ThemeTests, [switch]$WindTests, [switch]$BasketTests, [switch]$ScrollTests, [switch]$BasketAppearanceTests, [switch]$BasketMotionTests, [switch]$UpdateTests, [switch]$TextTests, [switch]$EnvelopeMotionTests, [switch]$MonitorTests, [switch]$ReleaseTests, [switch]$BasketLayoutTests, [switch]$BuildOnly, [switch]$TopHoverTests, [switch]$Package)
+﻿param([switch]$DesktopTests, [switch]$VisibilityTests, [switch]$FolderTests, [switch]$MenuTests, [switch]$EditorTests, [switch]$ThemeTests, [switch]$WindTests, [switch]$BasketTests, [switch]$ScrollTests, [switch]$BasketAppearanceTests, [switch]$BasketMotionTests, [switch]$UpdateTests, [switch]$TextTests, [switch]$EnvelopeMotionTests, [switch]$MonitorTests, [switch]$ReleaseTests, [switch]$BasketLayoutTests, [switch]$BuildOnly, [switch]$TopHoverTests, [switch]$Package)
 $ErrorActionPreference = 'Stop'
 $projectRoot = $PSScriptRoot
 $frameworkPath = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319'

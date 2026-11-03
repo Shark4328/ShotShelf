@@ -1,4 +1,4 @@
-param([switch]$FlickerProbe, [switch]$Portrait, [switch]$ScrollProbe, [switch]$ClipboardProbe, [switch]$BasketProbe, [switch]$BasketLayout, [switch]$InstalledBasket, [switch]$EditorProbe)
+﻿param([switch]$FlickerProbe, [switch]$Portrait, [switch]$ScrollProbe, [switch]$ClipboardProbe, [switch]$BasketProbe, [switch]$BasketLayout, [switch]$InstalledBasket, [switch]$EditorProbe)
 $ErrorActionPreference = 'Stop'
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $frameworkPath = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319'

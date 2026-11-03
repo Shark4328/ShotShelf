@@ -921,6 +921,7 @@ namespace ScreenLine
             close.Focusable = false;
             close.Opacity = 0;
             close.ToolTip = FileRules.IsInside(item.Path, gallery.Store.Inbox) ? "删除图片（移到回收站）" : "移除记录（保留原文件）";
+            System.Windows.Automation.AutomationProperties.SetName(close, FileRules.IsInside(item.Path, gallery.Store.Inbox) ? "删除图片" : "移除记录");
             close.Click += delegate { act(ShotAction.Trash, item); };
             imageLayer.Children.Add(close);
             Surface.Child = imageLayer;
@@ -957,9 +958,16 @@ namespace ScreenLine
             copied.Child = new TextBlock { Text = "✓ 已复制", FontSize = 12, FontWeight = FontWeights.SemiBold,
                 Foreground = LightTheme.Brush("#20408E"), TextAlignment = TextAlignment.Center };
             copied.Opacity = 0;
+            copied.Visibility = Visibility.Collapsed;
             copied.IsHitTestVisible = false;
             Children.Add(copied);
-            flash.Tick += delegate { flash.Stop(); copied.BeginAnimation(OpacityProperty, new DoubleAnimation(0, TimeSpan.FromSeconds(0.2))); };
+            flash.Tick += delegate
+            {
+                flash.Stop();
+                var fade = new DoubleAnimation(0, TimeSpan.FromSeconds(0.2));
+                fade.Completed += delegate { if (!flash.IsEnabled) copied.Visibility = Visibility.Collapsed; };
+                copied.BeginAnimation(OpacityProperty, fade);
+            };
             Surface.MouseEnter += delegate { hovering = true; close.BeginAnimation(OpacityProperty, new DoubleAnimation(1, TimeSpan.FromSeconds(0.18))); };
             Surface.MouseLeave += delegate { hovering = false; close.BeginAnimation(OpacityProperty, new DoubleAnimation(0, TimeSpan.FromSeconds(0.18))); };
             Surface.MouseLeftButtonDown += Down;
@@ -1130,6 +1138,7 @@ namespace ScreenLine
 
         public void FlashCopied()
         {
+            copied.Visibility = Visibility.Visible;
             copied.BeginAnimation(OpacityProperty, new DoubleAnimation(1, TimeSpan.FromSeconds(0.15)));
             Nudge(3);
             flash.Stop(); flash.Start();

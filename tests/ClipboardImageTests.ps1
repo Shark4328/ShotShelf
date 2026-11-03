@@ -1,4 +1,4 @@
-param([switch]$CurrentClipboard, [switch]$Worker)
+﻿param([switch]$CurrentClipboard, [switch]$Worker)
 $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $framework = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319'

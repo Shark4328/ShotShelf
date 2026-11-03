@@ -1,4 +1,4 @@
-param([int]$KeepDays = 7)
+﻿param([int]$KeepDays = 7)
 $ErrorActionPreference = 'Stop'
 $buildRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\build'))
 $testRoot = Join-Path $buildRoot 'test-data'
