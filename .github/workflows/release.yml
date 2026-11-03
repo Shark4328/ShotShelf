@@ -1,0 +1,56 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate tag and release notes
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tag = $env:GITHUB_REF_NAME
+          if ($tag -notmatch '^v\d+\.\d+\.\d+$') { throw "无效的版本标签：$tag" }
+          $version = $tag.Substring(1)
+          if (-not (Test-Path -LiteralPath "docs/releases/$tag.md")) { throw "缺少发布说明：docs/releases/$tag.md" }
+          Add-Content -LiteralPath $env:GITHUB_ENV -Value ('VERSION=' + $version) -Encoding ASCII
+
+      - name: Build and package
+        shell: powershell
+        run: .\build.ps1 -Package
+
+      - name: Verify version and assets
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $info = [Diagnostics.FileVersionInfo]::GetVersionInfo('build\ShotShelf.exe')
+          if ($info.ProductVersion -ne $env:VERSION) { throw "程序版本 $($info.ProductVersion) 与标签 $env:VERSION 不一致" }
+          $zip = "releases\ShotShelf-$env:VERSION-windows-x64.zip"
+          if (-not (Test-Path -LiteralPath $zip)) { throw "缺少安装包：$zip" }
+          if (-not (Test-Path -LiteralPath ($zip + '.sha256'))) { throw "缺少校验文件：$zip.sha256" }
+          $actual = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant() + '  ' + [IO.Path]::GetFileName($zip)
+          $expected = (Get-Content -LiteralPath ($zip + '.sha256') -Raw).Trim()
+          if ($actual -ne $expected) { throw '发布包 SHA-256 与校验文件不一致' }
+
+      - name: Create GitHub Release
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tag = $env:GITHUB_REF_NAME
+          $zip = "releases\ShotShelf-$env:VERSION-windows-x64.zip"
+          gh release create $tag $zip ($zip + '.sha256') --title "ShotShelf 图架 $env:VERSION" --notes-file "docs/releases/$tag.md" --verify-tag --latest
+          if ($LASTEXITCODE -ne 0) { throw '创建 GitHub Release 失败' }

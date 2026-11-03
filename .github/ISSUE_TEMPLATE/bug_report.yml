@@ -1,0 +1,67 @@
+name: Bug report
+description: 报告 ShotShelf 的可复现问题
+title: "[Bug] "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈。请先确认使用的是最新正式版本，并搜索已有 Issue。
+        不要在公开 Issue 中粘贴访问令牌、隐私图片或未脱敏的个人路径。
+  - type: input
+    id: version
+    attributes:
+      label: ShotShelf 版本
+      placeholder: 1.0.0
+    validations:
+      required: true
+  - type: input
+    id: system
+    attributes:
+      label: Windows 版本与显示缩放
+      placeholder: Windows 11 23H2，150%
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      description: 请写出从启动程序开始的最短操作路径。
+      placeholder: |
+        1. 启动 ShotShelf
+        2. 按 Ctrl+Alt+S
+        3. 框选区域并保存
+        4. 观察……
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 预期行为
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际行为
+      description: 可附上脱敏后的截图或 error.log 内容。
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: 运行方式
+      options:
+        - Install.cmd 安装版
+        - 解压目录直接运行
+        - 从源码构建
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: 提交前检查
+      options:
+        - label: 我已搜索已有 Issue，并移除了令牌和隐私信息。
+          required: true

@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build, test, and package
+        shell: powershell
+        run: .\build.ps1 -Package
+
+      - name: Upload Windows package
+        uses: actions/upload-artifact@v4
+        with:
+          name: ShotShelf-windows-x64
+          path: releases/ShotShelf-*-windows-x64.zip
+          if-no-files-found: error
