@@ -75,12 +75,12 @@ namespace ScreenLine
             KeyboardNavigation.SetTabNavigation(panel, KeyboardNavigationMode.Cycle);
             KeyboardNavigation.SetDirectionalNavigation(panel, KeyboardNavigationMode.Cycle);
             var heading = new Grid { Height = 42, Margin = new Thickness(8, 0, 12, 5) };
-            using (var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("PicRope.Icon"))
+            using (var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("ShotShelf.Icon"))
             {
                 var logo = BitmapDecoder.Create(stream, BitmapCreateOptions.None, BitmapCacheOption.OnLoad).Frames.OrderByDescending(frame => frame.PixelWidth).First();
                 heading.Children.Add(new Image { Source = logo, Width = 28, Height = 28, HorizontalAlignment = HorizontalAlignment.Left });
             }
-            heading.Children.Add(new TextBlock { Text = "图绳", FontSize = 16, FontWeight = FontWeights.SemiBold, Margin = new Thickness(39, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center });
+            heading.Children.Add(new TextBlock { Text = "图架", FontSize = 16, FontWeight = FontWeights.SemiBold, Margin = new Thickness(39, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center });
             heading.Children.Add(new TextBlock { Text = "v" + AppUpdates.CurrentVersion, FontSize = 11, Foreground = LightTheme.Brush("#65717F"), HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center });
             panel.Children.Add(heading);
 

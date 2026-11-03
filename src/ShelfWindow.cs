@@ -115,7 +115,7 @@ namespace ScreenLine
                 var card = cards.Values.FirstOrDefault(item => item.Surface.IsMouseOver && !item.Grip.IsMouseOver);
                 if (card != null) Preview.Enter(card);
             };
-            Title = "PicRope · 图绳";
+            Title = "ShotShelf · 图架";
             Width = 1000;
             Height = 220;
             WindowStyle = WindowStyle.None;

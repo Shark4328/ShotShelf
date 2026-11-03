@@ -36,7 +36,7 @@ namespace ScreenLine
             var thread = new Thread(Loop)
             {
                 IsBackground = true,
-                Name = "PicRope 截图抓取"
+                Name = "ShotShelf 截图抓取"
             };
             thread.SetApartmentState(ApartmentState.STA);
             thread.Start();

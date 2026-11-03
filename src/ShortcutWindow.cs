@@ -20,7 +20,7 @@ namespace ScreenLine
 
         internal ShortcutWindow(uint modifiers, uint key, Func<uint, uint, bool> save)
         {
-            Title = "截图快捷键 · 图绳"; Width = 420; Height = 290; ResizeMode = ResizeMode.NoResize;
+            Title = "截图快捷键 · 图架"; Width = 420; Height = 290; ResizeMode = ResizeMode.NoResize;
             WindowStartupLocation = WindowStartupLocation.CenterScreen; ShowInTaskbar = false; Topmost = true;
             FontFamily = new System.Windows.Media.FontFamily("Microsoft YaHei UI");
             var body = new StackPanel { Margin = new Thickness(24) };

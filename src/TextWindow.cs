@@ -30,7 +30,7 @@ namespace ScreenLine
         {
             BitmapSource image;
             if (images.TryGetValue(theme.Id, out image)) return image;
-            image = SkinImages.Crop("PicRope.Envelope." + theme.Id, bounds[Array.IndexOf(LineTheme.All, theme)]);
+            image = SkinImages.Crop("ShotShelf.Envelope." + theme.Id, bounds[Array.IndexOf(LineTheme.All, theme)]);
             images.Add(theme.Id, image);
             return image;
         }
@@ -69,7 +69,7 @@ namespace ScreenLine
         {
             this.texts = texts; this.shelf = shelf;
             foreach (var item in texts.Items) item.IsMarked = false;
-            Title = "文字 · 图绳"; Owner = shelf;
+            Title = "文字 · 图架"; Owner = shelf;
             Width = 460; Height = 456;
             WindowStyle = WindowStyle.None; ResizeMode = ResizeMode.NoResize;
             AllowsTransparency = true; Background = Brushes.Transparent;

@@ -34,7 +34,7 @@ namespace ScreenLine
         {
             BitmapSource picture;
             if (pictures.TryGetValue(theme.Id, out picture)) return picture;
-            picture = SkinImages.Crop("PicRope.Basket." + theme.Id, bounds[Array.IndexOf(LineTheme.All, theme)]);
+            picture = SkinImages.Crop("ShotShelf.Basket." + theme.Id, bounds[Array.IndexOf(LineTheme.All, theme)]);
             pictures.Add(theme.Id, picture);
             return picture;
         }
@@ -103,7 +103,7 @@ namespace ScreenLine
         public BasketWindow(Gallery gallery, Action<bool> setAutoHang, Action<CaptureItem> hang, Action<ShotAction, CaptureItem> act)
         {
             this.gallery = gallery; this.setAutoHang = setAutoHang; this.hang = hang; this.act = act;
-            Title = "图片篮子 · 图绳";
+            Title = "图片篮子 · 图架";
             WindowStyle = WindowStyle.None; ResizeMode = ResizeMode.NoResize;
             AllowsTransparency = true; Background = Brushes.Transparent;
             ShowInTaskbar = false; Topmost = true;

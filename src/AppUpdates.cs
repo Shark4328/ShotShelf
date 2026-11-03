@@ -21,11 +21,11 @@ namespace ScreenLine
 
     internal sealed class AppUpdates : IDisposable
     {
-        public const string Repository = "https://github.com/Renly1994/PicRope";
-        public const string Endpoint = "https://api.github.com/repos/Renly1994/PicRope/releases/latest";
+        public const string Repository = "https://github.com/Shark4328/ShotShelf";
+        public const string Endpoint = "https://api.github.com/repos/Shark4328/ShotShelf/releases/latest";
         public static readonly string CurrentVersion = Assembly.GetExecutingAssembly().GetCustomAttributes(typeof(AssemblyInformationalVersionAttribute), false)
             .Cast<AssemblyInformationalVersionAttribute>().Single().InformationalVersion;
-        internal static readonly string Cache = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "PicRope", "Updates");
+        internal static readonly string Cache = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ShotShelf", "Updates");
         readonly HttpClient client;
 
         public AppUpdates() : this(new HttpClientHandler()) { }
@@ -33,7 +33,7 @@ namespace ScreenLine
         {
             System.Net.ServicePointManager.SecurityProtocol = System.Net.SecurityProtocolType.Tls12;
             client = new HttpClient(handler) { Timeout = TimeSpan.FromMinutes(10) };
-            client.DefaultRequestHeaders.UserAgent.ParseAdd("PicRope/" + CurrentVersion);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("ShotShelf/" + CurrentVersion);
             client.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
         }
 
@@ -59,7 +59,7 @@ namespace ScreenLine
             string version = (release.tag_name ?? "").TrimStart('v', 'V');
             if (!Regex.IsMatch(version, @"^\d+\.\d+\.\d+$")) throw new InvalidDataException("更新版本号无效。");
             if (new Version(version) <= new Version(current)) return null;
-            string file = "PicRope-" + version + "-windows-x64.zip";
+            string file = "ShotShelf-" + version + "-windows-x64.zip";
             var asset = (release.assets ?? new AssetData[0]).SingleOrDefault(item => item.name == file);
             if (asset == null) throw new InvalidDataException("新版本暂未提供 Windows 安装包，请稍后重试。");
             string expected = Repository + "/releases/download/" + release.tag_name + "/" + file;
@@ -130,7 +130,7 @@ namespace ScreenLine
                     entry.ExtractToFile(file);
                 }
             }
-            string executable = Path.Combine(root, "app", "PicRope.exe");
+            string executable = Path.Combine(root, "app", "ShotShelf.exe");
             if (!File.Exists(executable) || FileVersionInfo.GetVersionInfo(executable).ProductVersion != version
                 || !File.Exists(Path.Combine(root, "app", "editor", "index.html")) || !File.Exists(Path.Combine(root, "app", "update.ps1")))
                 throw new InvalidDataException("更新包不完整或版本不匹配。");

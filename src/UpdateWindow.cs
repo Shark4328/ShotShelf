@@ -20,7 +20,7 @@ namespace ScreenLine
 
         public UpdateWindow(UpdateRelease release, AppUpdates updates, Func<string, Task<bool>> apply)
         {
-            Title = "更新图绳"; Width = 520; SizeToContent = SizeToContent.Height;
+            Title = "更新图架"; Width = 520; SizeToContent = SizeToContent.Height;
             WindowStyle = WindowStyle.None; ResizeMode = ResizeMode.NoResize;
             AllowsTransparency = true; Background = Brushes.Transparent;
             ShowInTaskbar = false; WindowStartupLocation = WindowStartupLocation.CenterScreen;
@@ -32,7 +32,7 @@ namespace ScreenLine
             var close = LightTheme.Button("", Close, "quiet"); close.Content = LightTheme.CloseIcon();
             close.MinWidth = 0; close.Width = close.Height = 28; close.Padding = new Thickness(0); close.HorizontalAlignment = HorizontalAlignment.Right;
             AutomationProperties.SetName(close, "关闭更新窗口"); heading.Children.Add(close); body.Children.Add(heading);
-            body.Children.Add(new TextBlock { Text = "图绳 " + AppUpdates.CurrentVersion + " → " + release.Version, FontSize = 14, Foreground = LightTheme.Brush("#65717F"), Margin = new Thickness(0, 10, 0, 20) });
+            body.Children.Add(new TextBlock { Text = "图架 " + AppUpdates.CurrentVersion + " → " + release.Version, FontSize = 14, Foreground = LightTheme.Brush("#65717F"), Margin = new Thickness(0, 10, 0, 20) });
             body.Children.Add(new ScrollViewer { MaxHeight = 220, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
                 Content = new TextBlock { Text = String.IsNullOrWhiteSpace(release.Notes) ? "新版本已准备好。" : release.Notes,
                     FontSize = 13, LineHeight = 22, TextWrapping = TextWrapping.Wrap, Foreground = LightTheme.Brush("#343D49") } });

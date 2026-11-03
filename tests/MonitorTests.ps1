@@ -7,7 +7,7 @@ $compilerPath = Join-Path $frameworkPath 'csc.exe'
 $simulation = 'ScreenLine.Tests.MultiMonitorChecks'
 $native = [IO.File]::ReadAllText((Join-Path $projectRoot 'src\WindowsNative.cs'))
 
-# 仅在隔离测试副本中替换系统边界，保留图绳的原始业务代码。
+# 仅在隔离测试副本中替换系统边界，保留图架的原始业务代码。
 $replacements = @(
     @('public static Forms.Screen[] Screens { get { return Forms.Screen.AllScreens; } }', "public static Forms.Screen[] Screens { get { return $simulation.Simulating ? $simulation.Screens : Forms.Screen.AllScreens; } }"),
     @('public static Point Cursor()', "public static Point Cursor() { return $simulation.Simulating ? $simulation.Pointer : OriginalCursor(); }`n        static Point OriginalCursor()"),
@@ -35,12 +35,12 @@ $references = @(
     '/r:System.Net.Http.dll', '/r:System.IO.Compression.dll', '/r:System.IO.Compression.FileSystem.dll'
 )
 $sources = (Get-ChildItem -LiteralPath (Join-Path $projectRoot 'src') -Filter '*.cs' | Where-Object Name -ne 'WindowsNative.cs').FullName
-$iconPath = Join-Path $projectRoot 'src\assets\PicRope.ico'
-$resources = @("/resource:$iconPath,PicRope.Icon")
+$iconPath = Join-Path $projectRoot 'src\assets\ShotShelf.ico'
+$resources = @("/resource:$iconPath,ShotShelf.Icon")
 & (Join-Path $projectRoot 'packaging\prepare-assets.ps1')
 foreach ($prefix in @('basket', 'envelope')) {
     $resourceName = if ($prefix -eq 'basket') { 'Basket' } else { 'Envelope' }
-    $resources += Get-ChildItem -LiteralPath (Join-Path $projectRoot 'build\runtime-assets') -Filter "$prefix-*.png" | ForEach-Object { '/resource:' + $_.FullName + ',PicRope.' + $resourceName + '.' + $_.BaseName.Substring($prefix.Length + 1) }
+    $resources += Get-ChildItem -LiteralPath (Join-Path $projectRoot 'build\runtime-assets') -Filter "$prefix-*.png" | ForEach-Object { '/resource:' + $_.FullName + ',ShotShelf.' + $resourceName + '.' + $_.BaseName.Substring($prefix.Length + 1) }
 }
 $executablePath = Join-Path $outputPath 'MultiMonitorChecks.exe'
 & $compilerPath /nologo /target:exe /platform:x64 /codepage:65001 /main:ScreenLine.Tests.MultiMonitorChecks "/out:$executablePath" "/win32manifest:$projectRoot\src\app.manifest" $references $resources $sources $nativePath (Join-Path $PSScriptRoot 'MonitorTests.cs')

@@ -133,11 +133,11 @@ namespace ScreenLine.Tests
             var idle = new LastInput { Size = (uint)Marshal.SizeOf(typeof(LastInput)) };
             bool inputReadable = GetLastInputInfo(ref idle);
             uint idleMilliseconds = inputReadable ? unchecked((uint)Environment.TickCount - idle.Tick) : 0;
-            int runningInstances = System.Diagnostics.Process.GetProcessesByName("PicRope").Length;
-            Console.WriteLine("物理菜单预检：输入状态可读={0}，无输入时间={1}ms，PicRope 实例={2}", inputReadable, idleMilliseconds, runningInstances);
+            int runningInstances = System.Diagnostics.Process.GetProcessesByName("ShotShelf").Length;
+            Console.WriteLine("物理菜单预检：输入状态可读={0}，无输入时间={1}ms，ShotShelf 实例={2}", inputReadable, idleMilliseconds, runningInstances);
             if (!inputReadable || idleMilliseconds < 10000 || runningInstances > 0)
             {
-                Console.WriteLine("跳过物理菜单探测：用户最近 10 秒内有输入、输入状态不可读或存在 PicRope 实例。");
+                Console.WriteLine("跳过物理菜单探测：用户最近 10 秒内有输入、输入状态不可读或存在 ShotShelf 实例。");
                 Environment.ExitCode = 2; return;
             }
             var before = WindowsNative.Cursor(); var focus = WindowsNative.GetForegroundWindow();
@@ -1393,7 +1393,7 @@ namespace ScreenLine.Tests
                     "图片、夹子、篮子和信封收起后均不留在屏幕内");
                 SetCursorPos(area.Right - (int)Math.Round(80 * scale), area.Top + (int)Math.Round(160 * scale));
                 tick.Invoke(shelf, new object[] { null, EventArgs.Empty });
-                Check(shelf.Revealed, "收起完成后可继续从下方访问图绳");
+                Check(shelf.Revealed, "收起完成后可继续从下方访问图架");
                 var foreground = new Window { Title = "普通前台窗口", Width = 400, Height = 300, Left = 200, Top = 100, ShowInTaskbar = false };
                 try
                 {
@@ -1402,14 +1402,14 @@ namespace ScreenLine.Tests
                     SetCursorPos(corner.X, corner.Y);
                     Check(WindowsNative.OverCaptionButtons(shelf.Display, corner, shelf.Handle), "普通前台窗口之外的最大化窗口右上角触发避让");
                     tick.Invoke(shelf, new object[] { null, EventArgs.Empty });
-                    Check(!shelf.Revealed, "最大化窗口右上角可在普通前台窗口之外收起图绳");
+                    Check(!shelf.Revealed, "最大化窗口右上角可在普通前台窗口之外收起图架");
                     var foregroundHandle = new System.Windows.Interop.WindowInteropHelper(foreground).Handle;
                     WindowsNative.SetWindowPos(foregroundHandle, IntPtr.Zero, area.Right - 400, area.Top, 400, 300, 0x14);
                     await Task.Delay(100);
                     shelf.Reveal(true, true, 60);
                     Check(!WindowsNative.OverCaptionButtons(shelf.Display, corner, shelf.Handle), "普通窗口遮住屏幕右上角时不触发避让");
                     tick.Invoke(shelf, new object[] { null, EventArgs.Empty });
-                    Check(shelf.Revealed, "普通窗口遮住屏幕右上角时图绳保持展开");
+                    Check(shelf.Revealed, "普通窗口遮住屏幕右上角时图架保持展开");
                 }
                 finally { foreground.Close(); }
                 WindowsNative.ActivateEditor(new System.Windows.Interop.WindowInteropHelper(backdrop).Handle);
@@ -1424,7 +1424,7 @@ namespace ScreenLine.Tests
                 SetCursorPos(pointer.X, pointer.Y);
                 Check(!WindowsNative.OverCaptionButtons(shelf.Display, pointer, shelf.Handle), "普通窗口右上角不触发避让");
                 tick.Invoke(shelf, new object[] { null, EventArgs.Empty });
-                Check(shelf.Revealed, "普通窗口右上角不会收起图绳");
+                Check(shelf.Revealed, "普通窗口右上角不会收起图架");
             }
             finally { backdrop.Close(); shelf.SetRevealOnTopHover(previousTopHover); }
         }

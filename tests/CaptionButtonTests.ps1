@@ -1,4 +1,4 @@
-param([string]$NativeSource, [ValidatePattern('^[A-Za-z0-9_-]+$')][string]$RunName = 'results')
+﻿param([string]$NativeSource, [ValidatePattern('^[A-Za-z0-9_-]+$')][string]$RunName = 'results')
 $ErrorActionPreference = 'Stop'
 $projectRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $fixtureRoot = Join-Path $projectRoot 'build\caption-button-tests'

@@ -1,4 +1,4 @@
-param([string]$OutputPath = (Join-Path $PSScriptRoot '..\build\runtime-assets'))
+﻿param([string]$OutputPath = (Join-Path $PSScriptRoot '..\build\runtime-assets'))
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
 New-Item -ItemType Directory -Path $OutputPath -Force | Out-Null

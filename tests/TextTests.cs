@@ -145,7 +145,7 @@ namespace ScreenLine.Tests
             store.State.Texts = new List<TextItem> { controller.Texts.Items.Last(), controller.Texts.Items[0], controller.Texts.Items[2], controller.Texts.Items[1] };
             for (int i = 0; i < 4; i++) store.State.Texts[i].CreatedUtc = DateTime.UtcNow.AddMinutes(-i * 30);
             string project = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, ".."));
-            foreach (string name in new[] { "rope-preview.png", "picrope-banner.png" })
+            foreach (string name in new[] { "rope-preview.png", "basket-preview-windows.png" })
             {
                 string imagePath = Path.Combine(root, name);
                 File.Copy(Path.Combine(project, "docs", "assets", name), imagePath);

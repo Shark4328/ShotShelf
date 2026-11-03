@@ -16,12 +16,12 @@ using Microsoft.VisualBasic.FileIO;
 using Microsoft.Win32;
 using Forms = System.Windows.Forms;
 
-[assembly: AssemblyTitle("PicRope · 图绳")]
-[assembly: AssemblyProduct("PicRope")]
-[assembly: AssemblyDescription("图绳：把截图挂在屏幕上沿，随手复制、拖拽和保存。")]
-[assembly: AssemblyVersion("1.3.0.0")]
-[assembly: AssemblyFileVersion("1.3.0.0")]
-[assembly: AssemblyInformationalVersion("1.3.0")]
+[assembly: AssemblyTitle("ShotShelf · 图架")]
+[assembly: AssemblyProduct("ShotShelf")]
+[assembly: AssemblyDescription("图架：把截图挂在屏幕上沿，随手复制、拖拽和保存。")]
+[assembly: AssemblyVersion("1.0.0.0")]
+[assembly: AssemblyFileVersion("1.0.0.0")]
+[assembly: AssemblyInformationalVersion("1.0.0")]
 
 namespace ScreenLine
 {
@@ -81,9 +81,9 @@ namespace ScreenLine
             Captures.Arrived += Shelf.ShowNewCapture;
             Captures.Arrived += async delegate { await RunCleanup(); };
             Captures.Failed += Notice;
-            using (var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("PicRope.Icon"))
+            using (var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("ShotShelf.Icon"))
                 tray.Icon = new System.Drawing.Icon(stream, Forms.SystemInformation.SmallIconSize);
-            tray.Text = "PicRope · 图绳";
+            tray.Text = "ShotShelf · 图架";
             TrayMenu = new TrayPanel();
             SyncScreens();
             TrayMenu.Opened += delegate { SyncScreens(); };
@@ -154,12 +154,12 @@ namespace ScreenLine
             {
                 using (var key = Registry.CurrentUser.CreateSubKey(RunKey))
                 {
-                    if (startup.IsChecked) key.SetValue("PicRope", Quote(Assembly.GetEntryAssembly().Location));
-                    else key.DeleteValue("PicRope", false);
+                    if (startup.IsChecked) key.SetValue("ShotShelf", Quote(Assembly.GetEntryAssembly().Location));
+                    else key.DeleteValue("ShotShelf", false);
                 }
             });
             startup.IsCheckable = true;
-            using (var key = Registry.CurrentUser.OpenSubKey(RunKey)) startup.IsChecked = key != null && key.GetValue("PicRope") != null;
+            using (var key = Registry.CurrentUser.OpenSubKey(RunKey)) startup.IsChecked = key != null && key.GetValue("ShotShelf") != null;
             updateMenu = more.AddAction("检查更新…", "save", async delegate { await CheckForUpdates(true); });
             updateMenu.InputGestureText = "v" + AppUpdates.CurrentVersion;
             updateTimer.Tick += async delegate { updateTimer.Interval = TimeSpan.FromHours(12); await CheckForUpdates(false); };
@@ -244,7 +244,7 @@ namespace ScreenLine
                 else if (manual) ShowUpdate();
                 else if (Gallery.Store.State.LastUpdateNotification != availableUpdate.Version)
                 {
-                    tray.ShowBalloonTip(10000, "图绳有新版本 " + availableUpdate.Version, "点击查看更新并下载安装。", Forms.ToolTipIcon.Info);
+                    tray.ShowBalloonTip(10000, "图架有新版本 " + availableUpdate.Version, "点击查看更新并下载安装。", Forms.ToolTipIcon.Info);
                     Gallery.Store.State.LastUpdateNotification = availableUpdate.Version; Gallery.Store.Save();
                 }
             }

@@ -219,7 +219,7 @@ namespace ScreenLine
 
     internal static class ClipboardRules
     {
-        public const string OwnFormat = "PicRope.OwnClipboard";
+        public const string OwnFormat = "ShotShelf.OwnClipboard";
         internal static readonly KeyValuePair<string, string>[] EncodedFormats = {
             new KeyValuePair<string, string>("PNG", ".png"), new KeyValuePair<string, string>("image/png", ".png"),
             new KeyValuePair<string, string>("image/jpeg", ".jpg"), new KeyValuePair<string, string>("image/jpg", ".jpg"), new KeyValuePair<string, string>("image/jpe", ".jpg"),

@@ -72,7 +72,7 @@ namespace ScreenLine.Tests
             var htmlOnly = new DataObject(); htmlOnly.SetData(DataFormats.Html, "<img src='a.png'>");
             Check(!ClipboardRules.IsImage(htmlOnly), "只有图片链接而没有图片数据不收集");
             var file = new DataObject(); file.SetData("PNG", new byte[] { 1 }); file.SetData(DataFormats.FileDrop, new[] { "C:\\a.png" });
-            Check(!ClipboardRules.IsImage(file), "文件复制和图绳自己的复制不自动收集");
+            Check(!ClipboardRules.IsImage(file), "文件复制和图架自己的复制不自动收集");
             var wechat = new DataObject(); wechat.SetData(DataFormats.FileDrop, new[] { "C:\\image.jpg" });
             wechat.SetData("DeviceIndependentBitmap", new byte[] { 1 }); wechat.SetData("image/png", new byte[] { 1 });
             Check(ClipboardRules.IsImage(wechat, "Weixin"), "微信聊天图片带文件格式时仍收集图片内容");
@@ -91,7 +91,7 @@ namespace ScreenLine.Tests
             var wechatMany = new DataObject(); wechatMany.SetData(DataFormats.FileDrop, new[] { "C:\\a.jpg", "C:\\b.jpg" });
             wechatMany.SetData("DeviceIndependentBitmap", new byte[] { 1 }); wechatMany.SetData("image/png", new byte[] { 1 });
             Check(!ClipboardRules.IsImage(wechatMany, "Weixin"), "多文件复制不误认为单张图片");
-            string fixture = Path.Combine(Path.GetTempPath(), "picrope-clipboard-" + Guid.NewGuid().ToString("N") + ".png");
+            string fixture = Path.Combine(Path.GetTempPath(), "shotshelf-clipboard-" + Guid.NewGuid().ToString("N") + ".png");
             try
             {
                 byte[] contents = { 1, 2, 3, 4 }; File.WriteAllBytes(fixture, contents);
@@ -102,7 +102,7 @@ namespace ScreenLine.Tests
             }
             finally { File.Delete(fixture); }
             var own = new DataObject(); own.SetData("PNG", new byte[] { 1 }); own.SetData(ClipboardRules.OwnFormat, "1");
-            Check(!ClipboardRules.IsImage(own), "图绳自身复制的纯图片不再重复收集");
+            Check(!ClipboardRules.IsImage(own), "图架自身复制的纯图片不再重复收集");
             var rich = new DataObject(); rich.SetData("PNG", new byte[] { 1 }); rich.SetData(DataFormats.Html, "<img src='a.png'>"); rich.SetData(DataFormats.Rtf, "{\\rtf1 test}");
             Check(!ClipboardRules.IsImage(rich), "富文本内容不自动收集");
             var text = new DataObject(); text.SetData("PNG", new byte[] { 1 }); text.SetData(DataFormats.UnicodeText, "正文");

@@ -297,7 +297,7 @@ namespace ScreenLine
         internal CaptureWindow(Forms.Screen screen, BitmapSource picture = null, List<Rect> windowSnapshot = null)
         {
             scale = WindowsNative.MonitorScale(screen);
-            Title = "区域截图 · 图绳";
+            Title = "区域截图 · 图架";
             WindowStyle = WindowStyle.None; ResizeMode = ResizeMode.NoResize; ShowInTaskbar = false;
             Topmost = true; Background = Brushes.Black; Cursor = Cursors.Cross;
             Width = screen.Bounds.Width / scale; Height = screen.Bounds.Height / scale;
@@ -528,7 +528,7 @@ namespace ScreenLine
             var picker = new SaveFileDialog { Title = "保存截图", Filter = "PNG 图片|*.png", FileName = "截图_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".png", AddExtension = true, DefaultExt = ".png" };
             if (picker.ShowDialog(this) != true) return;
             try { ImageEditFiles.Save(picker.FileName, ImageContent.EncodeClipboard(Surface.Export())); }
-            catch (Exception error) { MessageBox.Show(this, "无法保存截图：" + error.Message, "图绳", MessageBoxButton.OK, MessageBoxImage.Error); }
+            catch (Exception error) { MessageBox.Show(this, "无法保存截图：" + error.Message, "图架", MessageBoxButton.OK, MessageBoxImage.Error); }
         }
 
         void Finish()

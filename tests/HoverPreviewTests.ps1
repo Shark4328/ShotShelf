@@ -12,14 +12,14 @@ $references = @(
     "/r:$projectRoot\vendor\WebView2\Microsoft.Web.WebView2.Core.dll", "/r:$projectRoot\vendor\WebView2\Microsoft.Web.WebView2.Wpf.dll",
     '/r:System.dll', '/r:System.Core.dll', '/r:System.Drawing.dll', '/r:System.Windows.Forms.dll', '/r:System.Net.Http.dll', '/r:System.IO.Compression.dll', '/r:System.IO.Compression.FileSystem.dll'
 )
-$resources = @(Get-ChildItem -LiteralPath (Join-Path $buildPath 'runtime-assets') -Filter 'basket-*.png' | ForEach-Object { '/resource:' + $_.FullName + ',PicRope.Basket.' + $_.BaseName.Substring(7) })
-$resources += @(Get-ChildItem -LiteralPath (Join-Path $buildPath 'runtime-assets') -Filter 'envelope-*.png' | ForEach-Object { '/resource:' + $_.FullName + ',PicRope.Envelope.' + $_.BaseName.Substring(9) })
+$resources = @(Get-ChildItem -LiteralPath (Join-Path $buildPath 'runtime-assets') -Filter 'basket-*.png' | ForEach-Object { '/resource:' + $_.FullName + ',ShotShelf.Basket.' + $_.BaseName.Substring(7) })
+$resources += @(Get-ChildItem -LiteralPath (Join-Path $buildPath 'runtime-assets') -Filter 'envelope-*.png' | ForEach-Object { '/resource:' + $_.FullName + ',ShotShelf.Envelope.' + $_.BaseName.Substring(9) })
 $sources = (Get-ChildItem -LiteralPath (Join-Path $projectRoot 'src') -Filter '*.cs').FullName
-$icon = Join-Path $projectRoot 'src\assets\PicRope.ico'
+$icon = Join-Path $projectRoot 'src\assets\ShotShelf.ico'
 $testName = if ($FlickerProbe) { 'HoverFlickerProbe' } elseif ($ScrollProbe) { 'HoverScrollTests' } elseif ($ClipboardProbe) { 'ClipboardBasketProbe' } elseif ($BasketProbe) { 'BasketPerformanceTests' } elseif ($BasketLayout) { 'BasketLayoutTests' } elseif ($EditorProbe) { 'EditorResourceProbe' } else { 'HoverPreviewTests' }
 if ($EditorProbe) { $references += '/r:System.Management.dll' }
 $manifest = if ($ScrollProbe) { "/win32manifest:$projectRoot\src\app.manifest" }
-& $compilerPath /nologo /target:exe /platform:x64 /codepage:65001 "/main:ScreenLine.Tests.$testName" "/out:$buildPath\$testName.exe" "/resource:$icon,PicRope.Icon" $manifest $resources $references $sources (Join-Path $PSScriptRoot ($testName + '.cs'))
+& $compilerPath /nologo /target:exe /platform:x64 /codepage:65001 "/main:ScreenLine.Tests.$testName" "/out:$buildPath\$testName.exe" "/resource:$icon,ShotShelf.Icon" $manifest $resources $references $sources (Join-Path $PSScriptRoot ($testName + '.cs'))
 if ($LASTEXITCODE -ne 0) { throw '悬停预览测试构建失败' }
 Copy-Item -LiteralPath (Join-Path $projectRoot 'src\App.config') -Destination (Join-Path $buildPath ($testName + '.exe.config'))
 Copy-Item -LiteralPath (Join-Path $projectRoot 'vendor\WebView2\Microsoft.Web.WebView2.Core.dll'),(Join-Path $projectRoot 'vendor\WebView2\Microsoft.Web.WebView2.Wpf.dll'),(Join-Path $projectRoot 'vendor\WebView2\WebView2Loader.dll') -Destination $buildPath

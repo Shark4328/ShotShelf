@@ -171,7 +171,7 @@ namespace ScreenLine
 
         public PreviewWindow(ShelfWindow owner)
         {
-            Owner = owner; Title = "图片预览 · 图绳";
+            Owner = owner; Title = "图片预览 · 图架";
             WindowStyle = WindowStyle.None; ResizeMode = ResizeMode.NoResize;
             AllowsTransparency = true; Background = Brushes.Transparent;
             ShowInTaskbar = false; ShowActivated = false; Topmost = true; IsHitTestVisible = false;

@@ -135,7 +135,7 @@ namespace ScreenLine
 
         static BitmapSource LoadPaper()
         {
-            return SkinImages.Crop("PicRope.Envelope.letter", new Int32Rect(212, 115, 830, 1055));
+            return SkinImages.Crop("ShotShelf.Envelope.letter", new Int32Rect(212, 115, 830, 1055));
         }
     }
 }

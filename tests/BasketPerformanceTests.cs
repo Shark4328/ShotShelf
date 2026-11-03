@@ -40,7 +40,7 @@ namespace ScreenLine.Tests
             var gallery = new Gallery(store);
             if (installed)
             {
-                string profile = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "PicRope", "data", "state.json");
+                string profile = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "ShotShelf", "data", "state.json");
                 var state = new JavaScriptSerializer().Deserialize<SavedState>(File.ReadAllText(profile));
                 foreach (string path in state.Collection.Where(File.Exists)) gallery.Collect(path, await Task.Run(() => ImageContent.Read(path, false)));
             }
@@ -77,7 +77,7 @@ namespace ScreenLine.Tests
                 basket = new BasketWindow(gallery, delegate { }, delegate { }, delegate { });
                 Console.WriteLine("实际图片集窗口构造：{0}ms", opening.ElapsedMilliseconds);
             }
-            basket.Title = "图绳 · 篮子性能验证"; if (installed) basket.Opacity = 0;
+            basket.Title = "图架 · 篮子性能验证"; if (installed) basket.Opacity = 0;
             var clock = Stopwatch.StartNew(); long last = 0, largestGap = 0, largestAt = 0;
             var heartbeat = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(20) };
             heartbeat.Tick += delegate { long now = clock.ElapsedMilliseconds; if (now - last > largestGap) { largestGap = now - last; largestAt = now; } last = now; };

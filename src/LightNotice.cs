@@ -14,7 +14,7 @@ namespace ScreenLine
 
         public LightNotice(string message)
         {
-            Title = "图绳提示";
+            Title = "图架提示";
             AutomationProperties.SetAutomationId(this, "LightNotice");
             Width = 380; SizeToContent = SizeToContent.Height;
             WindowStyle = WindowStyle.None; ResizeMode = ResizeMode.NoResize;

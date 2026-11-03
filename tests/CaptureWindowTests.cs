@@ -38,8 +38,8 @@ namespace ScreenLine.Tests
         static void Fixture(Application app)
         {
             var screen = Forms.Screen.PrimaryScreen.Bounds;
-            var lower = new Window { Title = "图绳截图测试窗口甲", WindowStyle = WindowStyle.None, Background = Brushes.CornflowerBlue, Topmost = true, ShowInTaskbar = false };
-            var upper = new Window { Title = "图绳截图测试窗口乙", WindowStyle = WindowStyle.None, Background = Brushes.Coral, Topmost = true, ShowInTaskbar = false };
+            var lower = new Window { Title = "图架截图测试窗口甲", WindowStyle = WindowStyle.None, Background = Brushes.CornflowerBlue, Topmost = true, ShowInTaskbar = false };
+            var upper = new Window { Title = "图架截图测试窗口乙", WindowStyle = WindowStyle.None, Background = Brushes.Coral, Topmost = true, ShowInTaskbar = false };
             lower.Show(); upper.Show();
             WindowsNative.SetWindowPos(new System.Windows.Interop.WindowInteropHelper(lower).Handle, new IntPtr(-1), screen.Left + 100, screen.Top + 100, 300, 220, 0x10);
             WindowsNative.SetWindowPos(new System.Windows.Interop.WindowInteropHelper(upper).Handle, new IntPtr(-1), screen.Left + 220, screen.Top + 150, 300, 220, 0x10);
@@ -53,7 +53,7 @@ namespace ScreenLine.Tests
             CaptureWindow capture = null;
             try
             {
-                for (int i = 0; i < 60 && FindWindow(null, "图绳截图测试窗口乙") == IntPtr.Zero; i++) await Task.Delay(50);
+                for (int i = 0; i < 60 && FindWindow(null, "图架截图测试窗口乙") == IntPtr.Zero; i++) await Task.Delay(50);
                 await Task.Delay(150);
                 var screen = Forms.Screen.PrimaryScreen;
                 int uiThread = Thread.CurrentThread.ManagedThreadId;

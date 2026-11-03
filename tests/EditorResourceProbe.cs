@@ -38,7 +38,7 @@ namespace ScreenLine.Tests
             string path = Path.Combine(root, "sample.png"); File.WriteAllBytes(path, ImageContent.EncodeClipboard(bitmap));
             object before = Sample();
             editor = new ImageEditorWindow(path, store, delegate { return Task.FromResult(0); }, delegate { });
-            editor.Title = "图绳 · 编辑器资源验证"; editor.Show();
+            editor.Title = "图架 · 编辑器资源验证"; editor.Show();
             Task ready = editor.Ready;
             if (await Task.WhenAny(ready, Task.Delay(20000)) != ready) throw new Exception("编辑器加载超时");
             await ready; await Task.Delay(1000); object opened = Sample();

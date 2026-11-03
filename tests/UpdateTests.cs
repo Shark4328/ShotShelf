@@ -52,17 +52,17 @@ namespace ScreenLine.Tests
             {
                 var parameters = new CompilerParameters { GenerateExecutable = true, OutputAssembly = fixture, CompilerOptions = "/target:winexe" };
                 var result = compiler.CompileAssemblyFromSource(parameters,
-                    "[assembly:System.Reflection.AssemblyInformationalVersion(\"1.3.1\")] class Fixture { static void Main() { System.IO.File.WriteAllText(System.IO.Path.Combine(System.AppDomain.CurrentDomain.BaseDirectory, \"started.txt\"), \"ok\"); } }");
+                    "[assembly:System.Reflection.AssemblyInformationalVersion(\"1.0.1\")] class Fixture { static void Main() { System.IO.File.WriteAllText(System.IO.Path.Combine(System.AppDomain.CurrentDomain.BaseDirectory, \"started.txt\"), \"ok\"); } }");
                 if (result.Errors.HasErrors) throw new Exception(result.Errors[0].ToString());
             }
             package = MakePackage(fixture, null);
-            data = new AppUpdates.ReleaseData { tag_name = "v1.3.1", body = "改进图片篮子\n修复截图选择问题", assets = new[] {
-                new AppUpdates.AssetData { name = "PicRope-1.3.1-source.zip" },
-                new AppUpdates.AssetData { name = "PicRope-1.3.1-windows-x64.zip", size = package.Length,
-                    browser_download_url = AppUpdates.Repository + "/releases/download/v1.3.1/PicRope-1.3.1-windows-x64.zip", digest = Digest(package) }
+            data = new AppUpdates.ReleaseData { tag_name = "v1.0.1", body = "改进图片篮子\n修复截图选择问题", assets = new[] {
+                new AppUpdates.AssetData { name = "ShotShelf-1.0.1-source.zip" },
+                new AppUpdates.AssetData { name = "ShotShelf-1.0.1-windows-x64.zip", size = package.Length,
+                    browser_download_url = AppUpdates.Repository + "/releases/download/v1.0.1/ShotShelf-1.0.1-windows-x64.zip", digest = Digest(package) }
             } };
-            Check(Parse().Version == "1.3.1" && Parse().DownloadUrl.EndsWith("windows-x64.zip"), "只选择较新的 Windows x64 安装包，不误取源码包");
-            Check(AppUpdates.Parse(json.Serialize(data), "1.3.1") == null && AppUpdates.Parse(json.Serialize(data), "1.4.0") == null, "同版与旧版不会提示升级或降级");
+            Check(Parse().Version == "1.0.1" && Parse().DownloadUrl.EndsWith("windows-x64.zip"), "只选择较新的 Windows x64 安装包，不误取源码包");
+            Check(AppUpdates.Parse(json.Serialize(data), "1.0.1") == null && AppUpdates.Parse(json.Serialize(data), "1.4.0") == null, "同版与旧版不会提示升级或降级");
             data.prerelease = true; Check(Parse() == null, "预发布版本不参与自动更新"); data.prerelease = false;
             data.draft = true; Check(Parse() == null, "草稿版本不参与更新"); data.draft = false;
             var asset = data.assets[1]; string original = asset.digest; asset.digest = null;
@@ -74,11 +74,11 @@ namespace ScreenLine.Tests
             var handler = new Handler(package, json.Serialize(data));
             using (var updates = new AppUpdates(handler))
             {
-                Check((await updates.CheckAsync(CancellationToken.None)).Version == "1.3.1", "检查更新能读取服务返回的新版本");
+                Check((await updates.CheckAsync(CancellationToken.None)).Version == "1.0.1", "检查更新能读取服务返回的新版本");
                 string work = await updates.DownloadAsync(release, new Progress<int>(), CancellationToken.None);
-                Check(File.Exists(Path.Combine(work, "contents", "app", "PicRope.exe")), "下载、大小校验、SHA256 校验及解压完整通过");
+                Check(File.Exists(Path.Combine(work, "contents", "app", "ShotShelf.exe")), "下载、大小校验、SHA256 校验及解压完整通过");
                 string target = Path.Combine(root, "installed"); Directory.CreateDirectory(Path.Combine(target, "data", "Captures"));
-                File.Copy(fixture, Path.Combine(target, "PicRope.exe")); File.WriteAllText(Path.Combine(target, "data", "state.json"), "用户设置");
+                File.Copy(fixture, Path.Combine(target, "ShotShelf.exe")); File.WriteAllText(Path.Combine(target, "data", "state.json"), "用户设置");
                 File.WriteAllText(Path.Combine(target, "data", "Captures", "用户图片.png"), "用户图片");
                 int exit = await RunInstaller(work, target);
                 Check(exit == 0 && File.Exists(Path.Combine(target, "started.txt")) && File.Exists(Path.Combine(target, "editor", "index.html")), "安装器替换文件并自动重启更新后的程序");
@@ -108,9 +108,9 @@ namespace ScreenLine.Tests
             }
             string archive = Path.Combine(root, "invalid.zip");
             File.WriteAllBytes(archive, MakePackage(fixture, "../escape.txt"));
-            Reject(delegate { AppUpdates.Extract(archive, Path.Combine(root, "extract"), "1.3.1"); }, "拒绝 ZIP 路径穿越");
+            Reject(delegate { AppUpdates.Extract(archive, Path.Combine(root, "extract"), "1.0.1"); }, "拒绝 ZIP 路径穿越");
             File.WriteAllBytes(archive, MakePackage(fixture, "app/data/state.json"));
-            Reject(delegate { AppUpdates.Extract(archive, Path.Combine(root, "extract-data"), "1.3.1"); }, "拒绝包含用户数据目录的更新包");
+            Reject(delegate { AppUpdates.Extract(archive, Path.Combine(root, "extract-data"), "1.0.1"); }, "拒绝包含用户数据目录的更新包");
             File.WriteAllBytes(archive, package);
             Reject(delegate { AppUpdates.Extract(archive, Path.Combine(root, "wrong-version"), "9.0.0"); }, "安装前校验程序实际版本与发布版本一致");
             using (var canceled = new CancellationTokenSource())
@@ -123,7 +123,7 @@ namespace ScreenLine.Tests
             if (live) using (var updates = new AppUpdates()) { await updates.CheckAsync(CancellationToken.None); Check(true, "真实 GitHub Release 接口连接与版本检查通过"); }
         }
 
-        static UpdateRelease Parse() { return AppUpdates.Parse(json.Serialize(data), "1.1.0"); }
+        static UpdateRelease Parse() { return AppUpdates.Parse(json.Serialize(data), "1.0.0"); }
         static string Digest(byte[] bytes) { using (var hash = SHA256.Create()) return "sha256:" + BitConverter.ToString(hash.ComputeHash(bytes)).Replace("-", "").ToLowerInvariant(); }
         static byte[] MakePackage(string fixture, string extra)
         {
@@ -131,7 +131,7 @@ namespace ScreenLine.Tests
             {
                 using (var zip = new ZipArchive(output, ZipArchiveMode.Create, true))
                 {
-                    zip.CreateEntryFromFile(fixture, "app/PicRope.exe");
+                    zip.CreateEntryFromFile(fixture, "app/ShotShelf.exe");
                     zip.CreateEntryFromFile(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "update.ps1"), "app/update.ps1");
                     using (var text = new StreamWriter(zip.CreateEntry("app/editor/index.html").Open())) text.Write("更新后的文件");
                     if (extra != null) using (var text = new StreamWriter(zip.CreateEntry(extra).Open())) text.Write("无效内容");
@@ -145,7 +145,7 @@ namespace ScreenLine.Tests
             {
                 for (int i = 0; i < 300 && !process.HasExited; i++)
                 {
-                    var dialog = FindWindow(null, "图绳更新"); if (dialog != IntPtr.Zero) SendMessage(dialog, 0x10, IntPtr.Zero, IntPtr.Zero);
+                    var dialog = FindWindow(null, "图架更新"); if (dialog != IntPtr.Zero) SendMessage(dialog, 0x10, IntPtr.Zero, IntPtr.Zero);
                     await Task.Delay(100);
                 }
                 if (!process.HasExited) throw new Exception("安装器未按时完成");

@@ -1,10 +1,10 @@
 ﻿param([Parameter(Mandatory=$true)][string]$WorkPath, [Parameter(Mandatory=$true)][string]$TargetPath, [int]$ParentProcessId)
 $ErrorActionPreference = 'Stop'
-$cacheRoot = [IO.Path]::GetFullPath((Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'PicRope\Updates'))
+$cacheRoot = [IO.Path]::GetFullPath((Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'ShotShelf\Updates'))
 $workRoot = [IO.Path]::GetFullPath($WorkPath).TrimEnd('\')
 $targetRoot = [IO.Path]::GetFullPath($TargetPath).TrimEnd('\')
 $sourceRoot = Join-Path $workRoot 'contents\app'
-$exePath = Join-Path $targetRoot 'PicRope.exe'
+$exePath = Join-Path $targetRoot 'ShotShelf.exe'
 $backupRoot = Join-Path $workRoot 'backup'
 $changed = New-Object 'Collections.Generic.List[object]'
 $mayRestart = $false
@@ -28,11 +28,11 @@ function Assert-PlainPath([string]$PathToCheck, [string]$AllowedRoot) {
 try {
     if (-not $workRoot.StartsWith($cacheRoot + '\', [StringComparison]::OrdinalIgnoreCase)) { throw '更新缓存目录无效。' }
     Assert-PlainPath $workRoot $cacheRoot
-    if (-not (Test-Path -LiteralPath $exePath) -or -not (Test-Path -LiteralPath (Join-Path $sourceRoot 'PicRope.exe'))) { throw '更新文件不完整。' }
+    if (-not (Test-Path -LiteralPath $exePath) -or -not (Test-Path -LiteralPath (Join-Path $sourceRoot 'ShotShelf.exe'))) { throw '更新文件不完整。' }
     Assert-PlainPath $targetRoot $targetRoot
     if ($ParentProcessId -gt 0) {
         $parent = Get-Process -Id $ParentProcessId -ErrorAction SilentlyContinue
-        if ($parent -and -not $parent.WaitForExit(30000)) { throw '图绳尚未退出，请先保存图片并关闭程序。' }
+        if ($parent -and -not $parent.WaitForExit(30000)) { throw '图架尚未退出，请先保存图片并关闭程序。' }
     }
     $mayRestart = $true
     foreach ($file in Get-ChildItem -LiteralPath $sourceRoot -Recurse -File | Sort-Object FullName) {
@@ -51,7 +51,7 @@ try {
         New-Item -ItemType Directory -Path (Split-Path $destination -Parent) -Force | Out-Null
         Copy-UpdateFile $file.FullName $destination
     }
-    $uninstallKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\PicRope'
+    $uninstallKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\ShotShelf'
     $registered = Get-ItemProperty -LiteralPath $uninstallKey -ErrorAction SilentlyContinue
     if ($registered -and [string]::Equals($registered.InstallLocation, $targetRoot, [StringComparison]::OrdinalIgnoreCase)) {
         $version = [Diagnostics.FileVersionInfo]::GetVersionInfo($exePath).ProductVersion
@@ -75,6 +75,6 @@ catch {
     if ($mayRestart -and $restored) { Start-Process -FilePath $exePath -WorkingDirectory $targetRoot -WindowStyle Hidden }
     Add-Type -AssemblyName System.Windows.Forms
     $recovery = if ($restored) { '原版本已保留，可稍后重试。' } else { '请重新运行安装包修复程序，图片和设置仍保留在 data 文件夹。' }
-    [Windows.Forms.MessageBox]::Show(('更新未完成：' + $message + "`r`n" + $recovery), '图绳更新', 'OK', 'Warning') | Out-Null
+    [Windows.Forms.MessageBox]::Show(('更新未完成：' + $message + "`r`n" + $recovery), '图架更新', 'OK', 'Warning') | Out-Null
     exit 1
 }

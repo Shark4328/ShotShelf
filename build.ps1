@@ -20,13 +20,13 @@ $references = @(
 )
 $sources = (Get-ChildItem -LiteralPath (Join-Path $projectRoot 'src') -Filter '*.cs').FullName
 $manifestPath = Join-Path $projectRoot 'src\app.manifest'
-$iconPath = Join-Path $projectRoot 'src\assets\PicRope.ico'
+$iconPath = Join-Path $projectRoot 'src\assets\ShotShelf.ico'
 & (Join-Path $projectRoot 'packaging\prepare-assets.ps1')
-$basketResources = Get-ChildItem -LiteralPath (Join-Path $buildPath 'runtime-assets') -Filter 'basket-*.png' | ForEach-Object { '/resource:' + $_.FullName + ',PicRope.Basket.' + $_.BaseName.Substring(7) }
-$basketResources += @(Get-ChildItem -LiteralPath (Join-Path $buildPath 'runtime-assets') -Filter 'envelope-*.png' | ForEach-Object { '/resource:' + $_.FullName + ',PicRope.Envelope.' + $_.BaseName.Substring(9) })
-& $compilerPath /nologo /target:winexe /platform:x64 /optimize+ /codepage:65001 "/out:$buildPath\PicRope.exe" "/win32manifest:$manifestPath" "/win32icon:$iconPath" "/resource:$iconPath,PicRope.Icon" $basketResources $references $sources
+$basketResources = Get-ChildItem -LiteralPath (Join-Path $buildPath 'runtime-assets') -Filter 'basket-*.png' | ForEach-Object { '/resource:' + $_.FullName + ',ShotShelf.Basket.' + $_.BaseName.Substring(7) }
+$basketResources += @(Get-ChildItem -LiteralPath (Join-Path $buildPath 'runtime-assets') -Filter 'envelope-*.png' | ForEach-Object { '/resource:' + $_.FullName + ',ShotShelf.Envelope.' + $_.BaseName.Substring(9) })
+& $compilerPath /nologo /target:winexe /platform:x64 /optimize+ /codepage:65001 "/out:$buildPath\ShotShelf.exe" "/win32manifest:$manifestPath" "/win32icon:$iconPath" "/resource:$iconPath,ShotShelf.Icon" $basketResources $references $sources
 if ($LASTEXITCODE -ne 0) { throw '应用构建失败' }
-Copy-Item -LiteralPath (Join-Path $projectRoot 'src\App.config') -Destination (Join-Path $buildPath 'PicRope.exe.config')
+Copy-Item -LiteralPath (Join-Path $projectRoot 'src\App.config') -Destination (Join-Path $buildPath 'ShotShelf.exe.config')
 Copy-Item -LiteralPath (Join-Path $projectRoot 'packaging\update.ps1') -Destination $buildPath
 Copy-Item -LiteralPath (Join-Path $projectRoot 'LICENSE'),(Join-Path $projectRoot 'NOTICE') -Destination $buildPath
 $editorPath = Join-Path $buildPath 'editor'
@@ -37,7 +37,7 @@ Copy-Item -LiteralPath (Join-Path $projectRoot 'vendor\Filerobot\filerobot-image
 Copy-Item -LiteralPath (Join-Path $projectRoot 'vendor\Filerobot\LICENSE'),(Join-Path $projectRoot 'vendor\Filerobot\THIRD-PARTY-NOTICES.txt') -Destination (Join-Path $noticePath 'Filerobot')
 Copy-Item -LiteralPath (Join-Path $projectRoot 'vendor\WebView2\LICENSE.txt'),(Join-Path $projectRoot 'vendor\WebView2\NOTICE.txt') -Destination (Join-Path $noticePath 'WebView2')
 Copy-Item -LiteralPath (Join-Path $projectRoot 'vendor\WebView2\Microsoft.Web.WebView2.Core.dll'),(Join-Path $projectRoot 'vendor\WebView2\Microsoft.Web.WebView2.Wpf.dll'),(Join-Path $projectRoot 'vendor\WebView2\WebView2Loader.dll') -Destination $buildPath
-Write-Output ('构建完成：' + (Join-Path $buildPath 'PicRope.exe'))
+Write-Output ('构建完成：' + (Join-Path $buildPath 'ShotShelf.exe'))
 
 if (-not $BuildOnly -and -not ($VisibilityTests -or $FolderTests -or $MenuTests -or $EditorTests -or $ThemeTests -or $WindTests -or $EnvelopeMotionTests -or $ReleaseTests -or $MonitorTests -or $TextTests -or $UpdateTests -or $TopHoverTests) -and (Test-Path -LiteralPath (Join-Path $projectRoot 'tests\CoreTests.cs'))) {
     & $compilerPath /nologo /target:exe /codepage:65001 "/out:$buildPath\CoreTests.exe" /main:ScreenLine.Tests.CoreTests $references (Join-Path $projectRoot 'src\Core.cs') (Join-Path $projectRoot 'src\SpringMotion.cs') (Join-Path $projectRoot 'src\ExportService.cs') (Join-Path $projectRoot 'src\CaptureCleanup.cs') (Join-Path $projectRoot 'tests\CoreTests.cs')
@@ -48,7 +48,7 @@ if (-not $BuildOnly -and -not ($VisibilityTests -or $FolderTests -or $MenuTests 
 
 if ($TopHoverTests -or $DesktopTests -or $VisibilityTests -or $MenuTests -or $EditorTests -or $ThemeTests -or $WindTests -or $BasketTests -or $ScrollTests -or $BasketAppearanceTests -or $BasketMotionTests) {
     $desktopReferences = $references + @("/r:$frameworkPath\WPF\UIAutomationClient.dll", "/r:$frameworkPath\WPF\UIAutomationTypes.dll", "/r:$frameworkPath\WPF\UIAutomationProvider.dll")
-    & $compilerPath /nologo /target:exe /platform:x64 /codepage:65001 "/out:$buildPath\DesktopTests.exe" /main:ScreenLine.Tests.DesktopTests "/win32manifest:$manifestPath" "/win32icon:$iconPath" "/resource:$iconPath,PicRope.Icon" $basketResources $desktopReferences $sources (Join-Path $projectRoot 'tests\DesktopTests.cs')
+    & $compilerPath /nologo /target:exe /platform:x64 /codepage:65001 "/out:$buildPath\DesktopTests.exe" /main:ScreenLine.Tests.DesktopTests "/win32manifest:$manifestPath" "/win32icon:$iconPath" "/resource:$iconPath,ShotShelf.Icon" $basketResources $desktopReferences $sources (Join-Path $projectRoot 'tests\DesktopTests.cs')
     if ($LASTEXITCODE -ne 0) { throw '桌面测试构建失败' }
     Copy-Item -LiteralPath (Join-Path $projectRoot 'src\App.config') -Destination (Join-Path $buildPath 'DesktopTests.exe.config')
     if ($TopHoverTests) { & (Join-Path $buildPath 'DesktopTests.exe') --top-hover }
@@ -80,7 +80,7 @@ if ($FolderTests) {
 }
 
 if ($UpdateTests) {
-    & $compilerPath /nologo /target:exe /platform:x64 /codepage:65001 "/out:$buildPath\UpdateTests.exe" /main:ScreenLine.Tests.UpdateTests "/win32manifest:$manifestPath" "/resource:$iconPath,PicRope.Icon" $basketResources $references $sources (Join-Path $projectRoot 'tests\UpdateTests.cs')
+    & $compilerPath /nologo /target:exe /platform:x64 /codepage:65001 "/out:$buildPath\UpdateTests.exe" /main:ScreenLine.Tests.UpdateTests "/win32manifest:$manifestPath" "/resource:$iconPath,ShotShelf.Icon" $basketResources $references $sources (Join-Path $projectRoot 'tests\UpdateTests.cs')
     if ($LASTEXITCODE -ne 0) { throw '更新测试构建失败' }
     Copy-Item -LiteralPath (Join-Path $projectRoot 'src\App.config') -Destination (Join-Path $buildPath 'UpdateTests.exe.config')
     & (Join-Path $buildPath 'UpdateTests.exe')
@@ -88,21 +88,21 @@ if ($UpdateTests) {
 }
 
 if ($TextTests) {
-    & $compilerPath /nologo /target:exe /platform:x64 /codepage:65001 "/out:$buildPath\TextTests.exe" /main:ScreenLine.Tests.TextTests "/win32manifest:$manifestPath" "/resource:$iconPath,PicRope.Icon" $basketResources $references $sources (Join-Path $projectRoot 'tests\TextTests.cs')
+    & $compilerPath /nologo /target:exe /platform:x64 /codepage:65001 "/out:$buildPath\TextTests.exe" /main:ScreenLine.Tests.TextTests "/win32manifest:$manifestPath" "/resource:$iconPath,ShotShelf.Icon" $basketResources $references $sources (Join-Path $projectRoot 'tests\TextTests.cs')
     if ($LASTEXITCODE -ne 0) { throw '文字功能测试构建失败' }
     & (Join-Path $buildPath 'TextTests.exe')
     if ($LASTEXITCODE -ne 0) { throw '文字功能测试未通过' }
 }
 
 if ($EnvelopeMotionTests) {
-    & $compilerPath /nologo /target:exe /platform:x64 /codepage:65001 "/out:$buildPath\EnvelopeMotionTests.exe" /main:ScreenLine.Tests.EnvelopeMotionTests "/win32manifest:$manifestPath" "/resource:$iconPath,PicRope.Icon" $basketResources $references $sources (Join-Path $projectRoot 'tests\EnvelopeMotionTests.cs')
+    & $compilerPath /nologo /target:exe /platform:x64 /codepage:65001 "/out:$buildPath\EnvelopeMotionTests.exe" /main:ScreenLine.Tests.EnvelopeMotionTests "/win32manifest:$manifestPath" "/resource:$iconPath,ShotShelf.Icon" $basketResources $references $sources (Join-Path $projectRoot 'tests\EnvelopeMotionTests.cs')
     if ($LASTEXITCODE -ne 0) { throw '信封动效测试构建失败' }
     & (Join-Path $buildPath 'EnvelopeMotionTests.exe')
     if ($LASTEXITCODE -ne 0) { throw '信封动效测试未通过' }
 }
 
 if ($ReleaseTests) {
-    & $compilerPath /nologo /target:exe /platform:x64 /codepage:65001 "/out:$buildPath\ReleaseTests.exe" /main:ScreenLine.Tests.ReleaseTests "/win32manifest:$manifestPath" "/resource:$iconPath,PicRope.Icon" $basketResources $references $sources (Join-Path $projectRoot 'tests\ReleaseTests.cs')
+    & $compilerPath /nologo /target:exe /platform:x64 /codepage:65001 "/out:$buildPath\ReleaseTests.exe" /main:ScreenLine.Tests.ReleaseTests "/win32manifest:$manifestPath" "/resource:$iconPath,ShotShelf.Icon" $basketResources $references $sources (Join-Path $projectRoot 'tests\ReleaseTests.cs')
     if ($LASTEXITCODE -ne 0) { throw '专项验证程序构建失败' }
     Copy-Item -LiteralPath (Join-Path $projectRoot 'src\App.config') -Destination (Join-Path $buildPath 'ReleaseTests.exe.config')
     & (Join-Path $buildPath 'ReleaseTests.exe')
@@ -110,7 +110,7 @@ if ($ReleaseTests) {
 }
 
 if ($BasketLayoutTests) {
-    & $compilerPath /nologo /target:exe /platform:x64 /codepage:65001 "/out:$buildPath\BasketLayoutTests.exe" /main:ScreenLine.Tests.BasketLayoutTests "/win32manifest:$manifestPath" "/resource:$iconPath,PicRope.Icon" $basketResources $references $sources (Join-Path $projectRoot 'tests\BasketLayoutTests.cs')
+    & $compilerPath /nologo /target:exe /platform:x64 /codepage:65001 "/out:$buildPath\BasketLayoutTests.exe" /main:ScreenLine.Tests.BasketLayoutTests "/win32manifest:$manifestPath" "/resource:$iconPath,ShotShelf.Icon" $basketResources $references $sources (Join-Path $projectRoot 'tests\BasketLayoutTests.cs')
     if ($LASTEXITCODE -ne 0) { throw '布局验证程序构建失败' }
     & (Join-Path $buildPath 'BasketLayoutTests.exe')
     if ($LASTEXITCODE -ne 0) { throw '布局验证未通过' }

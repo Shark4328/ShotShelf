@@ -29,7 +29,7 @@ namespace ScreenLine
 
     internal static class ExportRules
     {
-        public const string Prefix = "PicRope-导出-";
+        public const string Prefix = "ShotShelf-导出-";
 
         internal static string FolderName(DateTime now) { return Prefix + now.ToString("yyyyMMdd-HHmmss"); }
 

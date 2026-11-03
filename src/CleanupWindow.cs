@@ -41,7 +41,7 @@ namespace ScreenLine
             body.Children.Add(heading);
             body.Children.Add(new TextBlock
             {
-                Text = "只清理 PicRope 收集目录中的截图；篮子与桌面上正在使用的图片会保留。",
+                Text = "只清理 ShotShelf 收集目录中的截图；篮子与桌面上正在使用的图片会保留。",
                 FontSize = 12, Foreground = LightTheme.Brush("#65717F"), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 16)
             });
             UsageText = new TextBlock { Text = "", FontSize = 14, FontWeight = FontWeights.SemiBold, Foreground = LightTheme.Brush("#283343"), Margin = new Thickness(0, 0, 0, 14) };

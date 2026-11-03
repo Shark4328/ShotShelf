@@ -206,7 +206,7 @@ namespace ScreenLine.Tests
                 Check(!shelf.Revealed && shelf.Display == secondary, label + "收起期间的 DPI 消息不会提前移动窗口");
             }
             Check(await Until(() => shelf.Revealed && shelf.Display == main), label + "展开时可从副屏切回主屏");
-            Check(slideAtMove <= -299.9, label + "调整目标屏幕窗口尺寸时图绳已完全收起");
+            Check(slideAtMove <= -299.9, label + "调整目标屏幕窗口尺寸时图架已完全收起");
             if (scenarios == 1)
             {
                 Pointer = new WindowsNative.Point { X = bounds.Left + bounds.Width / 2, Y = bounds.Top + 1 };
@@ -226,7 +226,7 @@ namespace ScreenLine.Tests
             FullScreens.Clear();
             Pointer = new WindowsNative.Point { X = 700, Y = 400 };
             await Task.Delay(70);
-            Check(shelf.Display == secondary, label + "鼠标经过其他屏幕内部不会带走图绳");
+            Check(shelf.Display == secondary, label + "鼠标经过其他屏幕内部不会带走图架");
 
             if (scenarios == 1)
             {
@@ -246,7 +246,7 @@ namespace ScreenLine.Tests
             shelf.Reveal(false, false, 0);
             Pointer.Y = 1;
             await Task.Delay(430);
-            Check(!shelf.Revealed && shelf.Display == secondary, label + "固定副屏后，主屏顶部不会呼出或带走图绳");
+            Check(!shelf.Revealed && shelf.Display == secondary, label + "固定副屏后，主屏顶部不会呼出或带走图架");
             Pointer = new WindowsNative.Point { X = bounds.Left + bounds.Width / 2, Y = bounds.Top + 1 };
             shelf.SetRevealOnTopHover(false);
             await Task.Delay(430);
@@ -383,7 +383,7 @@ namespace ScreenLine.Tests
                 Pointer = new WindowsNative.Point { X = 700, Y = 400 };
                 shelf.SetRevealOnTopHover(true); shelf.Toggle();
                 shelf.SetRevealOnTopHover(false);
-                Check(shelf.Revealed, "关闭悬停不收起已由手动入口显示的图绳");
+                Check(shelf.Revealed, "关闭悬停不收起已由手动入口显示的图架");
                 shelf.SetRevealOnTopHover(true);
                 Pointer = new WindowsNative.Point { X = secondary.Bounds.Left + 700, Y = secondary.Bounds.Top + 1 };
                 edge.SetValue(shelf, DateTime.UtcNow.AddSeconds(-1)); Tick();
@@ -433,7 +433,7 @@ namespace ScreenLine.Tests
 
             StartDisplaySwitch(main, secondary, true);
             shelf.Capturing = true; shelf.Reveal(false, false, 0); await Task.Delay(80);
-            Check(!shelf.Revealed && shelf.Capturing, "截图开始后旧回调不会重新展开图绳"); shelf.Capturing = false;
+            Check(!shelf.Revealed && shelf.Capturing, "截图开始后旧回调不会重新展开图架"); shelf.Capturing = false;
 
             StartDisplaySwitch(main, secondary, true);
             MouseDown = true; await Task.Delay(80);
