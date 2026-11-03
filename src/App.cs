@@ -19,9 +19,9 @@ using Forms = System.Windows.Forms;
 [assembly: AssemblyTitle("PicRope · 图绳")]
 [assembly: AssemblyProduct("PicRope")]
 [assembly: AssemblyDescription("图绳：把截图挂在屏幕上沿，随手复制、拖拽和保存。")]
-[assembly: AssemblyVersion("1.2.2.0")]
-[assembly: AssemblyFileVersion("1.2.2.0")]
-[assembly: AssemblyInformationalVersion("1.2.2")]
+[assembly: AssemblyVersion("1.3.0.0")]
+[assembly: AssemblyFileVersion("1.3.0.0")]
+[assembly: AssemblyInformationalVersion("1.3.0")]
 
 namespace ScreenLine
 {
@@ -43,11 +43,14 @@ namespace ScreenLine
         internal TextWindow TextWindow { get; private set; }
         internal CaptureWindow Capture { get; private set; }
         internal ShortcutWindow ShortcutSettings { get; private set; }
+        CleanupWindow cleanupWindow;
+        bool cleaning;
         readonly MenuItem captureMenu;
         internal readonly List<ImageEditorWindow> Editors = new List<ImageEditorWindow>();
         readonly AppUpdates updates = new AppUpdates();
         readonly CancellationTokenSource updateLifetime = new CancellationTokenSource();
         readonly DispatcherTimer updateTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(15) };
+        readonly DispatcherTimer cleanupTimer = new DispatcherTimer { Interval = TimeSpan.FromHours(1) };
         readonly MenuItem updateMenu;
         readonly bool automaticUpdates;
         UpdateRelease availableUpdate;
@@ -76,6 +79,7 @@ namespace ScreenLine
             textClipboardSequence = WindowsNative.GetClipboardSequenceNumber();
             events.ClipboardChanged += CollectClipboardText;
             Captures.Arrived += Shelf.ShowNewCapture;
+            Captures.Arrived += async delegate { await RunCleanup(); };
             Captures.Failed += Notice;
             using (var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("PicRope.Icon"))
                 tray.Icon = new System.Drawing.Icon(stream, Forms.SystemInformation.SmallIconSize);
@@ -144,6 +148,7 @@ namespace ScreenLine
             });
             more.AddAction("全部取下（保留文件）", "clear", delegate { Gallery.Clear(); });
             more.Separator();
+            more.AddAction("存储与清理…", "trash", ShowCleanup);
             MenuItem startup = null;
             startup = more.AddAction("开机启动", "startup", delegate
             {
@@ -158,6 +163,7 @@ namespace ScreenLine
             updateMenu = more.AddAction("检查更新…", "save", async delegate { await CheckForUpdates(true); });
             updateMenu.InputGestureText = "v" + AppUpdates.CurrentVersion;
             updateTimer.Tick += async delegate { updateTimer.Interval = TimeSpan.FromHours(12); await CheckForUpdates(false); };
+            cleanupTimer.Tick += async delegate { await RunCleanup(); };
             tray.BalloonTipClicked += delegate { ShowUpdate(); };
             TrayMenu.OnAction(TrayMenu.ExitButton, Exit);
             tray.MouseUp += delegate(object sender, Forms.MouseEventArgs args) { if (args.Button == Forms.MouseButtons.Right) ShowTrayMenu(); };
@@ -177,6 +183,8 @@ namespace ScreenLine
             Shelf.Reveal(true, false, 4);
             await Captures.Start();
             if (automaticUpdates) updateTimer.Start();
+            cleanupTimer.Start();
+            await RunCleanup();
         }
 
         void UpdateCaptureLabel()
@@ -208,9 +216,12 @@ namespace ScreenLine
             {
                 TrayMenu.Close(); if (Basket != null) Basket.Close(); if (TextWindow != null) TextWindow.Close();
                 if (Appearance != null) Appearance.Close(); if (ShortcutSettings != null) ShortcutSettings.Close();
-                Shelf.Reveal(false, false, 0); await Task.Delay(260);
+                // 收起货架后在后台完成抓屏，遮罩就绪前不再固定等待。
+                Shelf.HideForCapture(); await Shelf.WaitHidden();
                 if (disposed) return;
-                Capture = new CaptureWindow(display);
+                var shot = await CaptureShotRules.CaptureAsync(display);
+                if (disposed) return;
+                Capture = new CaptureWindow(display, shot.Picture, shot.Windows);
                 var result = await Capture.PickAsync(); Capture = null;
                 if (disposed) return;
                 if (result != null) await Captures.AcceptCapture(result);
@@ -270,6 +281,52 @@ namespace ScreenLine
         }
 
         void SyncAutoHang() { autoHang.IsChecked = Captures.AutoHang; }
+
+        void ShowCleanup()
+        {
+            if (cleanupWindow != null) { cleanupWindow.Activate(); return; }
+            cleanupWindow = new CleanupWindow(Gallery.Store, CleanupUsage, RunCleanup);
+            cleanupWindow.Owner = Shelf;
+            cleanupWindow.Closed += delegate { cleanupWindow = null; };
+            cleanupWindow.Show();
+        }
+
+        long CleanupUsage() { return CaptureCleanup.DirectoryBytes(Gallery.Store.Inbox); }
+
+        internal async Task RunCleanup()
+        {
+            if (disposed || cleaning) return;
+            var state = Gallery.Store.State;
+            if (!state.AutoCleanEnabled) return;
+            cleaning = true;
+            try
+            {
+                var protectedFiles = new List<string>();
+                foreach (var item in Gallery.Items) protectedFiles.Add(item.Path);
+                foreach (var pin in Shelf.PinWindows) protectedFiles.Add(pin.Item.Path);
+                foreach (var editor in Editors) if (!string.IsNullOrEmpty(editor.ImagePath)) protectedFiles.Add(editor.ImagePath);
+                if (Basket != null) protectedFiles.AddRange(Basket.InUsePaths);
+                var options = new CleanupOptions
+                {
+                    Enabled = true, Days = state.AutoCleanDays, ThresholdMb = state.AutoCleanThresholdMb,
+                    NowUtc = DateTime.UtcNow, ProtectedFiles = protectedFiles
+                };
+                string inbox = Gallery.Store.Inbox;
+                CleanupResult result = await Task.Run(() => CaptureCleanup.Run(inbox, options));
+                if (disposed) return;
+                state.LastCleanupUtc = DateTime.UtcNow;
+                if (result.Deleted > 0) { Gallery.Prune(); Shelf.Update(); }
+                bool notify = !result.ReachedThreshold
+                    && (state.LastCleanupNoticeUtc == default(DateTime) || (DateTime.UtcNow - state.LastCleanupNoticeUtc).TotalDays >= 1);
+                if (notify) state.LastCleanupNoticeUtc = DateTime.UtcNow;
+                try { Gallery.Store.Save(); }
+                catch (Exception error) { Gallery.Store.Log(error); }
+                if (notify)
+                    Notice("截图占用仍高于 " + state.AutoCleanThresholdMb + " MB，剩余 " + CleanupRules.FormatBytes(result.RemainingBytes) + "；正在使用的图片已保留。");
+            }
+            catch (Exception error) { if (!disposed) Gallery.Store.Log(error); }
+            finally { cleaning = false; }
+        }
 
         void SyncScreens()
         {
@@ -455,7 +512,7 @@ namespace ScreenLine
 
         public void Dispose()
         {
-            disposed = true; updateTimer.Stop(); updateLifetime.Cancel();
+            disposed = true; updateTimer.Stop(); cleanupTimer.Stop(); updateLifetime.Cancel();
             if (Capture != null) Capture.Close();
             if (ShortcutSettings != null) ShortcutSettings.Close();
             if (updateWindow != null) updateWindow.Close();
@@ -463,6 +520,7 @@ namespace ScreenLine
             if (Basket != null) Basket.Close();
             if (TextWindow != null) TextWindow.Close();
             if (Appearance != null) Appearance.Close();
+            if (cleanupWindow != null) cleanupWindow.Close();
             if (notice != null) notice.Close();
             foreach (var editor in Editors.ToArray()) editor.CloseWithoutPrompt();
             TrayMenu.Close();

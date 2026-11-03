@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -13,6 +14,7 @@ using System.Windows.Interop;
 using System.Windows.Markup;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using Forms = System.Windows.Forms;
 
 namespace ScreenLine
 {
@@ -74,14 +76,26 @@ namespace ScreenLine
         readonly HashSet<Image> loadingPictures = new HashSet<Image>();
         static readonly SemaphoreSlim thumbnailSlots = new SemaphoreSlim(2, 2);
         static readonly SemaphoreSlim previewSlot = new SemaphoreSlim(1, 1);
-        internal readonly Button PendingTab, AllTab, HangButton, DeleteButton, SelectAllButton;
+        internal readonly Button PendingTab, AllTab, HangButton, DeleteButton, SelectAllButton, ExportButton, OpenExportButton;
         internal readonly CheckBox AutoHang;
+        readonly TextBlock exportStatus;
+        internal readonly ExportMenu ExportMenu;
+        string lastExportOutput;
+        bool exporting;
         bool pendingOnly = true, refreshing, mounting, closed;
         CaptureItem previewItem;
         ImageContent previewContent;
         int previewVersion;
         double thumbnailHeight = 140;
         internal int SelectedCount { get { return selected.Count; } }
+        internal IEnumerable<string> InUsePaths
+        {
+            get
+            {
+                if (previewItem != null) yield return previewItem.Path;
+                foreach (string path in selected) yield return path;
+            }
+        }
         internal Image Preview { get { return preview; } }
         internal int VisibleCount { get { return choices.Count; } }
         internal Button ChoiceFor(string path) { return choices[path]; }
@@ -169,6 +183,7 @@ namespace ScreenLine
             footer.ColumnDefinitions.Add(new ColumnDefinition());
             footer.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             footer.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            footer.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             SelectAllButton = LightTheme.Button("全选", SelectAll);
             SelectAllButton.Background = LightTheme.Brush("#E4EEFC");
             SelectAllButton.BorderBrush = LightTheme.Brush("#8DB0DF");
@@ -176,23 +191,42 @@ namespace ScreenLine
             SelectAllButton.MinWidth = 112; SelectAllButton.Height = 38;
             SelectAllButton.VerticalAlignment = VerticalAlignment.Center;
             SelectAllButton.Margin = new Thickness(0, 0, 16, 0); footer.Children.Add(SelectAllButton);
-            status.TextTrimming = TextTrimming.CharacterEllipsis; status.Margin = new Thickness(0, 0, 12, 0);
-            Grid.SetColumn(status, 1); footer.Children.Add(status);
+            status.TextTrimming = TextTrimming.CharacterEllipsis; status.VerticalAlignment = VerticalAlignment.Center;
+            var information = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 12, 0) };
+            information.Children.Add(status);
+            var exportLine = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+            exportStatus = new TextBlock { FontSize = 11, Foreground = LightTheme.Brush("#65717F"), TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center, Visibility = Visibility.Collapsed };
+            exportLine.Children.Add(exportStatus);
+            OpenExportButton = LightTheme.Button("打开目录", OpenLastExport, "quiet");
+            OpenExportButton.FontSize = 11; OpenExportButton.Height = 20; OpenExportButton.MinWidth = 0; OpenExportButton.Padding = new Thickness(6, 0, 0, 0);
+            OpenExportButton.Visibility = Visibility.Collapsed;
+            AutomationProperties.SetName(OpenExportButton, "打开导出目录");
+            exportLine.Children.Add(OpenExportButton);
+            information.Children.Add(exportLine);
+            Grid.SetColumn(information, 1); footer.Children.Add(information);
+            ExportButton = LightTheme.Button("导出", ShowExportMenu);
+            ExportButton.Width = 96; ExportButton.Height = 38; ExportButton.MinWidth = 0;
+            ExportButton.HorizontalAlignment = HorizontalAlignment.Right; ExportButton.VerticalAlignment = VerticalAlignment.Center;
+            ExportButton.Margin = new Thickness(0, 0, 12, 0);
+            AutomationProperties.SetName(ExportButton, "导出图片"); Grid.SetColumn(ExportButton, 2); footer.Children.Add(ExportButton);
             DeleteButton = LightTheme.Button("删除所选", DeleteSelected);
             DeleteButton.Width = 112; DeleteButton.Height = 38;
             DeleteButton.HorizontalAlignment = HorizontalAlignment.Right; DeleteButton.VerticalAlignment = VerticalAlignment.Center;
             DeleteButton.Margin = new Thickness(0, 0, 12, 0); DeleteButton.Foreground = LightTheme.Brush("#B74E4A");
             DeleteButton.Background = LightTheme.Brush("#FFF8F7"); DeleteButton.BorderBrush = LightTheme.Brush("#ECD6D2");
             DeleteButton.ToolTip = "收集副本移到回收站，外部原图只移除记录";
-            AutomationProperties.SetName(DeleteButton, "删除所选图片"); Grid.SetColumn(DeleteButton, 2); footer.Children.Add(DeleteButton);
+            AutomationProperties.SetName(DeleteButton, "删除所选图片"); Grid.SetColumn(DeleteButton, 3); footer.Children.Add(DeleteButton);
             HangButton = LightTheme.Button("挂上绳子", Mount, "primary"); HangButton.Width = 144; HangButton.Height = 38;
             HangButton.HorizontalAlignment = HorizontalAlignment.Right; HangButton.VerticalAlignment = VerticalAlignment.Center;
-            AutomationProperties.SetName(HangButton, "挂上绳子"); Grid.SetColumn(HangButton, 3); footer.Children.Add(HangButton);
-            foreach (var button in new[] { PendingTab, AllTab, SelectAllButton, DeleteButton, HangButton })
+            AutomationProperties.SetName(HangButton, "挂上绳子"); Grid.SetColumn(HangButton, 4); footer.Children.Add(HangButton);
+            foreach (var button in new[] { PendingTab, AllTab, SelectAllButton, ExportButton, DeleteButton, HangButton })
             {
                 button.FontWeight = FontWeights.Normal;
             }
-            foreach (var button in new[] { SelectAllButton, DeleteButton, HangButton }) button.FontSize = 14;
+            foreach (var button in new[] { SelectAllButton, ExportButton, DeleteButton, HangButton }) button.FontSize = 14;
+            ExportMenu = new ExportMenu(BeginExport, OpenLastExport, delegate { return lastExportOutput; });
+            ExportMenu.PlacementTarget = ExportButton; ExportMenu.Placement = PlacementMode.Top;
+            ExportMenu.HorizontalOffset = 8; ExportMenu.VerticalOffset = 4;
             var bottom = new Border { BorderBrush = LightTheme.Brush("#E8EBEF"), BorderThickness = new Thickness(0, 1, 0, 0), Child = footer };
             Grid.SetRow(bottom, 3); body.Children.Add(bottom);
             SourceInitialized += delegate
@@ -404,6 +438,88 @@ namespace ScreenLine
             Refresh();
         }
 
+        void ShowExportMenu()
+        {
+            int chosen = gallery.Collected.Count(item => selected.Contains(item.Path));
+            ExportMenu.SetCounts(chosen, gallery.Collected.Count);
+            ExportMenu.IsOpen = true;
+        }
+
+        async void BeginExport(ExportScope scope, ExportFormat format)
+        {
+            if (exporting) return;
+            // 先固定文件快照，期间即使篮子刷新或文件被清理也不改变本次导出范围。
+            var items = (scope == ExportScope.All
+                ? gallery.Collected.ToArray()
+                : gallery.Collected.Where(item => selected.Contains(item.Path)).ToArray());
+            if (items.Length == 0)
+            {
+                status.Text = scope == ExportScope.All ? "图片篮子还是空的" : "请先选择要导出的图片";
+                return;
+            }
+            using (var picker = new Forms.FolderBrowserDialog { Description = "选择导出位置", ShowNewFolderButton = true })
+            {
+                if (picker.ShowDialog(new WindowHandleOwner(new WindowInteropHelper(this).Handle)) != Forms.DialogResult.OK) return;
+                exporting = true; ExportButton.IsEnabled = false;
+                exportStatus.Visibility = Visibility.Visible; OpenExportButton.Visibility = Visibility.Collapsed;
+                exportStatus.ToolTip = null; exportStatus.Text = "正在导出 0/" + items.Length + "…";
+                status.Text = "正在导出 " + items.Length + " 张图片";
+                try
+                {
+                    var request = new ExportRequest { Scope = scope, Format = format, Destination = picker.SelectedPath, Files = items.Select(item => item.Path).ToArray() };
+                    Action<int, int> report = delegate(int done, int total)
+                    {
+                        Dispatcher.BeginInvoke(new Action(delegate
+                        {
+                            if (closed || !exporting) return;
+                            exportStatus.Text = "正在导出 " + done + "/" + total + "…";
+                        }));
+                    };
+                    var result = await Task.Run(() => ExportService.Run(request, report));
+                    if (closed) return;
+                    lastExportOutput = result.Output;
+                    ExportMenu.Refresh();
+                    if (result.Error != null)
+                    {
+                        exportStatus.Text = result.Error; exportStatus.ToolTip = result.Error;
+                        OpenExportButton.Visibility = Visibility.Collapsed;
+                    }
+                    else
+                    {
+                        string summary = "已导出 " + result.Succeeded + " 张";
+                        if (result.Failures.Count > 0) summary += " · " + result.Failures.Count + " 张失败";
+                        exportStatus.Text = summary;
+                        exportStatus.ToolTip = result.Failures.Count == 0 ? result.Output
+                            : summary + "\n" + string.Join("\n", result.Failures.ToArray());
+                        OpenExportButton.Visibility = Visibility.Visible;
+                    }
+                }
+                catch (Exception error)
+                {
+                    exportStatus.Text = "导出未完成：" + error.Message; exportStatus.ToolTip = exportStatus.Text;
+                    OpenExportButton.Visibility = Visibility.Collapsed;
+                }
+                finally { exporting = false; if (!closed) ExportButton.IsEnabled = true; }
+                UpdateSelection();
+            }
+        }
+
+        void OpenLastExport()
+        {
+            string path = lastExportOutput;
+            try
+            {
+                if (path != null && File.Exists(path)) Process.Start("explorer.exe", "/select,\"" + path + "\"");
+                else if (path != null && Directory.Exists(path)) Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+                else
+                {
+                    exportStatus.Text = "导出目录已被移动或删除";
+                    OpenExportButton.Visibility = Visibility.Collapsed;
+                }
+            }
+            catch (Exception error) { exportStatus.Text = "无法打开导出目录：" + error.Message; }
+        }
+
         void UpdateSelection()
         {
             SelectAllButton.IsEnabled = choices.Count > 0;
@@ -412,6 +528,7 @@ namespace ScreenLine
             status.Text = "已选 " + selected.Count + " 张" + (pending < selected.Count ? " · " + pending + " 张待挂" : "");
             HangButton.IsEnabled = pending > 0;
             DeleteButton.IsEnabled = selected.Count > 0;
+            ExportMenu.SetCounts(gallery.Collected.Count(item => selected.Contains(item.Path)), gallery.Collected.Count);
         }
 
         void Mount()
@@ -433,5 +550,11 @@ namespace ScreenLine
             int removed = items.Count(item => !gallery.Collected.Contains(item));
             status.Text = "已删除 " + removed + " 张" + (removed < items.Length ? " · " + (items.Length - removed) + " 张未删除" : "");
         }
+    }
+
+    internal sealed class WindowHandleOwner : Forms.IWin32Window
+    {
+        public IntPtr Handle { get; private set; }
+        public WindowHandleOwner(IntPtr handle) { Handle = handle; }
     }
 }

@@ -28,8 +28,13 @@ namespace ScreenLine
         public List<string> Images { get; set; }
         public List<string> Collection { get; set; }
         public List<TextItem> Texts { get; set; }
+        public bool AutoCleanEnabled { get; set; }
+        public int AutoCleanDays { get; set; }
+        public int AutoCleanThresholdMb { get; set; }
+        public DateTime LastCleanupUtc { get; set; }
+        public DateTime LastCleanupNoticeUtc { get; set; }
 
-        public SavedState() { Images = new List<string>(); Collection = new List<string>(); Texts = new List<TextItem>(); Theme = "classic"; AutoHang = true; HoverPreview = true; RevealOnTopHover = true; CaptureModifiers = 3; CaptureKey = (uint)'S'; }
+        public SavedState() { Images = new List<string>(); Collection = new List<string>(); Texts = new List<TextItem>(); Theme = "classic"; AutoHang = true; HoverPreview = true; RevealOnTopHover = true; CaptureModifiers = 3; CaptureKey = (uint)'S'; AutoCleanEnabled = true; AutoCleanDays = CleanupRules.DefaultDays; AutoCleanThresholdMb = CleanupRules.DefaultThresholdMb; }
     }
 
     internal sealed class StateStore
@@ -50,14 +55,39 @@ namespace ScreenLine
             if (!File.Exists(file)) return;
             try
             {
-                State = serializer.Deserialize<SavedState>(File.ReadAllText(file, Encoding.UTF8)) ?? new SavedState();
+                string json = File.ReadAllText(file, Encoding.UTF8);
+                State = serializer.Deserialize<SavedState>(json) ?? new SavedState();
                 if (State.Images == null) State.Images = new List<string>();
                 if (State.Collection == null) State.Collection = new List<string>();
                 if (State.Texts == null) State.Texts = new List<TextItem>();
+                NormalizeCleanup(json);
             }
             catch (ArgumentException ex) { Log(ex); }
             catch (InvalidOperationException ex) { Log(ex); }
             catch (IOException ex) { Log(ex); }
+        }
+
+        // 旧版 state.json 没有清理字段时，反序列化会得到 false/0，需要按新版默认值补齐。
+        void NormalizeCleanup(string json)
+        {
+            bool hasEnabled = false, hasDays = false, hasThreshold = false;
+            try
+            {
+                var values = serializer.Deserialize<Dictionary<string, object>>(json);
+                if (values != null)
+                {
+                    hasEnabled = values.ContainsKey("AutoCleanEnabled");
+                    hasDays = values.ContainsKey("AutoCleanDays");
+                    hasThreshold = values.ContainsKey("AutoCleanThresholdMb");
+                }
+            }
+            catch (ArgumentException) { }
+            catch (InvalidOperationException) { }
+            if (!hasEnabled) State.AutoCleanEnabled = true;
+            if (!hasDays) State.AutoCleanDays = CleanupRules.DefaultDays;
+            if (!hasThreshold) State.AutoCleanThresholdMb = CleanupRules.DefaultThresholdMb;
+            if (State.AutoCleanDays < 1 || State.AutoCleanDays > CleanupRules.MaximumDays) State.AutoCleanDays = CleanupRules.DefaultDays;
+            if (State.AutoCleanThresholdMb < 1 || State.AutoCleanThresholdMb > CleanupRules.MaximumThresholdMb) State.AutoCleanThresholdMb = CleanupRules.DefaultThresholdMb;
         }
 
         public void Save()

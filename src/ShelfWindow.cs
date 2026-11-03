@@ -64,13 +64,15 @@ namespace ScreenLine
         readonly Stopwatch clock = Stopwatch.StartNew();
         readonly Random random = new Random();
         readonly List<ShotFlight> flights = new List<ShotFlight>();
+        readonly List<TaskCompletionSource<bool>> hideWaiters = new List<TaskCompletionSource<bool>>();
         readonly Dictionary<string, PinnedImageWindow> pins = new Dictionary<string, PinnedImageWindow>(StringComparer.OrdinalIgnoreCase);
         bool closing;
         readonly DispatcherTimer pointer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(30) };
         readonly DispatcherTimer scrollHover = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(120) };
         DateTime edgeSince = DateTime.MaxValue, awaySince = DateTime.MaxValue, peekUntil;
         DateTime nextGust;
-        double lastFrame, hideTime, hideFrom, drawnWidth = -1, drawnSag = -1;
+        double lastFrame, hideTime, hideFrom, hideSeconds = 0.22, drawnWidth = -1, drawnSag = -1;
+        bool hiding;
         double lastScrollOffset;
         bool rendering;
         bool pinned, previousDown, suppressEdge, trackingScrollHover, avoidingCaption, switchingDisplay, displayMoveQueued;
@@ -623,12 +625,18 @@ namespace ScreenLine
             peekUntil = DateTime.UtcNow.AddSeconds(seconds);
             awaySince = DateTime.MaxValue;
             if (shown && WindowsNative.FullScreen(Display, Handle)) return;
-            if (shown == Revealed) return;
+            if (shown == Revealed)
+            {
+                if (!shown) CompleteHidden();
+                return;
+            }
             if (shown) avoidingCaption = false;
             Revealed = shown;
             revealMotion.Target = shown ? 0 : HiddenY;
             hideFrom = revealMotion.Position;
             hideTime = 0;
+            hideSeconds = 0.22;
+            hiding = !shown;
             StartRendering();
             if (!shown)
             {
@@ -654,6 +662,29 @@ namespace ScreenLine
             rendering = true;
             lastFrame = clock.Elapsed.TotalSeconds;
             CompositionTarget.Rendering += RenderFrame;
+        }
+
+        // 截图前快速收起并等到实际完成，避免动画残留进入截图。
+        internal void HideForCapture()
+        {
+            Reveal(false, false, 0);
+            if (hiding) hideSeconds = 0.12;
+        }
+
+        internal async Task WaitHidden()
+        {
+            if (!hiding) return;
+            var waiter = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            hideWaiters.Add(waiter);
+            try { await Task.WhenAny(waiter.Task, Task.Delay(600)); }
+            finally { hideWaiters.Remove(waiter); }
+        }
+
+        void CompleteHidden()
+        {
+            hiding = false;
+            foreach (var waiter in hideWaiters.ToArray()) waiter.TrySetResult(true);
+            hideWaiters.Clear();
         }
 
         void StopRendering()
@@ -682,16 +713,16 @@ namespace ScreenLine
             else
             {
                 hideTime += elapsed;
-                double t = Math.Min(1, hideTime / 0.22);
+                double t = Math.Min(1, hideTime / hideSeconds);
                 double remaining = 1 - t;
                 revealMotion.Position = hideFrom + (HiddenY - hideFrom) * (1 - remaining * remaining * remaining);
-                revealMotion.Velocity = 3 * (HiddenY - hideFrom) * remaining * remaining / 0.22;
+                revealMotion.Velocity = 3 * (HiddenY - hideFrom) * remaining * remaining / hideSeconds;
                 if (t == 1) revealMotion.Snap(HiddenY);
             }
             slide.Y = revealMotion.Position;
             if (!Revealed)
             {
-                if (hideTime >= 0.22) StopRendering();
+                if (hideTime >= hideSeconds) { StopRendering(); CompleteHidden(); }
                 return;
             }
             ropeMotion.Step(elapsed);

@@ -40,7 +40,7 @@ Copy-Item -LiteralPath (Join-Path $projectRoot 'vendor\WebView2\Microsoft.Web.We
 Write-Output ('构建完成：' + (Join-Path $buildPath 'PicRope.exe'))
 
 if (-not $BuildOnly -and -not ($VisibilityTests -or $FolderTests -or $MenuTests -or $EditorTests -or $ThemeTests -or $WindTests -or $EnvelopeMotionTests -or $ReleaseTests -or $MonitorTests -or $TextTests -or $UpdateTests -or $TopHoverTests) -and (Test-Path -LiteralPath (Join-Path $projectRoot 'tests\CoreTests.cs'))) {
-    & $compilerPath /nologo /target:exe /codepage:65001 "/out:$buildPath\CoreTests.exe" /main:ScreenLine.Tests.CoreTests $references (Join-Path $projectRoot 'src\Core.cs') (Join-Path $projectRoot 'src\SpringMotion.cs') (Join-Path $projectRoot 'tests\CoreTests.cs')
+    & $compilerPath /nologo /target:exe /codepage:65001 "/out:$buildPath\CoreTests.exe" /main:ScreenLine.Tests.CoreTests $references (Join-Path $projectRoot 'src\Core.cs') (Join-Path $projectRoot 'src\SpringMotion.cs') (Join-Path $projectRoot 'src\ExportService.cs') (Join-Path $projectRoot 'src\CaptureCleanup.cs') (Join-Path $projectRoot 'tests\CoreTests.cs')
     if ($LASTEXITCODE -ne 0) { throw '核心测试构建失败' }
     & (Join-Path $buildPath 'CoreTests.exe')
     if ($LASTEXITCODE -ne 0) { throw '核心测试未通过' }

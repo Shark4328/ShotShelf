@@ -1,5 +1,8 @@
 using System;
+using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Text;
 using System.Windows.Media;
@@ -18,6 +21,174 @@ namespace ScreenLine.Tests
             Console.OutputEncoding = Encoding.UTF8;
             root = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "test-data", "core-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(root);
+            Run("导出：文件夹模式保留中文名、重名递增且不覆盖", delegate
+            {
+                string one = Path.Combine(root, "export-one"), two = Path.Combine(root, "export-two");
+                string destination = Path.Combine(root, "export-folder-out");
+                Directory.CreateDirectory(destination);
+                string first = WriteExport(one, "截图 甲.png", 1), second = WriteExport(two, "截图 甲.png", 2);
+                var result = ExportService.Run(new ExportRequest { Scope = ExportScope.All, Format = ExportFormat.Folder, Destination = destination, Files = new[] { first, second } }, null);
+                Check(result.Error == null && result.Succeeded == 2 && result.Failures.Count == 0 && Directory.Exists(result.Output));
+                string plain = Path.Combine(result.Output, "截图 甲.png"), numbered = Path.Combine(result.Output, "截图 甲 (2).png");
+                Check(File.Exists(plain) && File.Exists(numbered));
+                Check(File.ReadAllBytes(plain).SequenceEqual(File.ReadAllBytes(first)));
+                Check(File.ReadAllBytes(numbered).SequenceEqual(File.ReadAllBytes(second)));
+                var again = ExportService.Run(new ExportRequest { Scope = ExportScope.Selected, Format = ExportFormat.Folder, Destination = destination, Files = new[] { first } }, null);
+                Check(again.Error == null && again.Output != result.Output && File.Exists(Path.Combine(again.Output, "截图 甲.png")));
+            });
+            Run("导出：ZIP 与文件夹内容一致且无临时残留", delegate
+            {
+                string source = Path.Combine(root, "export-zip-source"), folderTarget = Path.Combine(root, "export-zip-folder"), zipTarget = Path.Combine(root, "export-zip-target");
+                Directory.CreateDirectory(folderTarget); Directory.CreateDirectory(zipTarget);
+                string a = WriteExport(source, "图 一.png", 3), b = WriteExport(source, "图 二.png", 4), c = WriteExport(source, "图 三.png", 5);
+                var folder = ExportService.Run(new ExportRequest { Scope = ExportScope.All, Format = ExportFormat.Folder, Destination = folderTarget, Files = new[] { a, b, c } }, null);
+                var zip = ExportService.Run(new ExportRequest { Scope = ExportScope.All, Format = ExportFormat.Zip, Destination = zipTarget, Files = new[] { a, b, c } }, null);
+                Check(folder.Error == null && folder.Succeeded == 3);
+                Check(zip.Error == null && zip.Succeeded == 3 && zip.Output.EndsWith(".zip", StringComparison.OrdinalIgnoreCase));
+                Check(Directory.GetFiles(zipTarget, "*.tmp").Length == 0);
+                var names = new List<string>();
+                using (var archive = ZipFile.OpenRead(zip.Output))
+                {
+                    Check(archive.Entries.Count == 3);
+                    foreach (var entry in archive.Entries)
+                    {
+                        names.Add(entry.FullName);
+                        using (var stream = entry.Open())
+                        using (var memory = new MemoryStream())
+                        {
+                            stream.CopyTo(memory);
+                            Check(memory.ToArray().SequenceEqual(File.ReadAllBytes(Path.Combine(folder.Output, entry.FullName))));
+                        }
+                    }
+                }
+                Check(names.Contains("图 一.png") && names.Contains("图 二.png") && names.Contains("图 三.png"));
+            });
+            Run("导出：丢失文件记入失败项，其余继续导出", delegate
+            {
+                string source = Path.Combine(root, "export-missing-source"), target = Path.Combine(root, "export-missing-out");
+                Directory.CreateDirectory(target);
+                string valid = WriteExport(source, "有效.png", 6);
+                string missing = Path.Combine(source, "已被清理.png");
+                var folder = ExportService.Run(new ExportRequest { Scope = ExportScope.All, Format = ExportFormat.Folder, Destination = target, Files = new[] { valid, missing } }, null);
+                Check(folder.Error == null && folder.Succeeded == 1 && folder.Total == 2 && folder.Failures.Count == 1 && folder.Failures[0] == "已被清理.png");
+                var zip = ExportService.Run(new ExportRequest { Scope = ExportScope.All, Format = ExportFormat.Zip, Destination = target, Files = new[] { valid, missing } }, null);
+                Check(zip.Error == null && zip.Succeeded == 1 && zip.Failures.Count == 1);
+                Check(Directory.GetFiles(target, "*.tmp").Length == 0);
+            });
+            Run("导出：没有图片或全部丢失时给出明确错误并清理残留", delegate
+            {
+                string source = Path.Combine(root, "export-empty-source"), target = Path.Combine(root, "export-empty-out");
+                Directory.CreateDirectory(source); Directory.CreateDirectory(target);
+                var zero = ExportService.Run(new ExportRequest { Scope = ExportScope.Selected, Format = ExportFormat.Folder, Destination = target, Files = new string[0] }, null);
+                Check(zero.Error != null && zero.Total == 0);
+                string missing = Path.Combine(source, "不存在.png");
+                var folder = ExportService.Run(new ExportRequest { Scope = ExportScope.All, Format = ExportFormat.Folder, Destination = target, Files = new[] { missing } }, null);
+                Check(folder.Error != null && folder.Succeeded == 0 && folder.Output == null && Directory.GetFileSystemEntries(target).Length == 0);
+                var zip = ExportService.Run(new ExportRequest { Scope = ExportScope.All, Format = ExportFormat.Zip, Destination = target, Files = new[] { missing } }, null);
+                Check(zip.Error != null && Directory.GetFiles(target).Length == 0);
+            });
+            Run("自动清理：超过保留天数的最旧截图先删除，三天边界一致", delegate
+            {
+                string inbox = Path.Combine(root, "cleanup-age", "Captures");
+                DateTime now = new DateTime(2026, 11, 3, 12, 0, 0, DateTimeKind.Utc);
+                string expired = CleanupFile(inbox, "旧.png", 100, now.AddDays(-3).AddSeconds(-1));
+                string boundary = CleanupFile(inbox, "刚好三天.png", 200, now.AddDays(-3));
+                string recent = CleanupFile(inbox, "新.png", 300, now.AddSeconds(-1));
+                var result = CaptureCleanup.Run(inbox, new CleanupOptions { Days = 3, ThresholdMb = 500, NowUtc = now });
+                Check(!File.Exists(expired) && !File.Exists(boundary) && File.Exists(recent));
+                Check(result.Deleted == 2 && result.FreedBytes == 300 && result.RemainingBytes == 300 && result.ReachedThreshold);
+            });
+            Run("自动清理：超出阈值时按最旧优先删除，保留较新文件", delegate
+            {
+                string inbox = Path.Combine(root, "cleanup-threshold", "Captures");
+                DateTime now = new DateTime(2026, 11, 3, 12, 0, 0, DateTimeKind.Utc);
+                string a = CleanupFile(inbox, "a.png", 400 * 1024, now.AddDays(-5));
+                string b = CleanupFile(inbox, "b.png", 400 * 1024, now.AddDays(-4));
+                string c = CleanupFile(inbox, "c.png", 400 * 1024, now.AddDays(-3).AddMinutes(-1));
+                string d = CleanupFile(inbox, "d.png", 400 * 1024, now.AddDays(-2));
+                var result = CaptureCleanup.Run(inbox, new CleanupOptions { Days = 30, ThresholdMb = 1, NowUtc = now });
+                Check(!File.Exists(a) && !File.Exists(b) && File.Exists(c) && File.Exists(d));
+                Check(result.Deleted == 2 && result.RemainingBytes == 800 * 1024 && result.ReachedThreshold);
+            });
+            Run("自动清理：当前篮子与桌面挂图受保护，无法达标时保留占用", delegate
+            {
+                string inbox = Path.Combine(root, "cleanup-protected", "Captures");
+                DateTime now = new DateTime(2026, 11, 3, 12, 0, 0, DateTimeKind.Utc);
+                string a = CleanupFile(inbox, "篮子.png", 700 * 1024, now.AddDays(-10));
+                string b = CleanupFile(inbox, "桌面.png", 700 * 1024, now.AddDays(-9));
+                var result = CaptureCleanup.Run(inbox, new CleanupOptions { Days = 3, ThresholdMb = 1, NowUtc = now, ProtectedFiles = new[] { a, b } });
+                Check(File.Exists(a) && File.Exists(b));
+                Check(result.Deleted == 0 && result.ProtectedSkipped == 2 && result.RemainingBytes == 1400 * 1024 && !result.ReachedThreshold);
+            });
+            Run("自动清理：锁定文件记录失败后继续删除其他文件", delegate
+            {
+                string inbox = Path.Combine(root, "cleanup-locked", "Captures");
+                DateTime now = new DateTime(2026, 11, 3, 12, 0, 0, DateTimeKind.Utc);
+                string locked = CleanupFile(inbox, "使用中.png", 500, now.AddDays(-4));
+                string free = CleanupFile(inbox, "可删除.png", 300, now.AddDays(-4).AddMinutes(1));
+                using (var stream = new FileStream(locked, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+                {
+                    var result = CaptureCleanup.Run(inbox, new CleanupOptions { Days = 3, ThresholdMb = 500, NowUtc = now });
+                    Check(File.Exists(locked) && !File.Exists(free));
+                    Check(result.Deleted == 1 && result.Failures.Count == 1 && result.RemainingBytes == 500);
+                }
+            });
+            Run("自动清理：关闭后不删除，重复触发不会二次删除", delegate
+            {
+                string inbox = Path.Combine(root, "cleanup-repeat", "Captures");
+                DateTime now = new DateTime(2026, 11, 3, 12, 0, 0, DateTimeKind.Utc);
+                string old = CleanupFile(inbox, "旧.png", 400, now.AddDays(-8));
+                var disabled = CaptureCleanup.Run(inbox, new CleanupOptions { Enabled = false, Days = 3, ThresholdMb = 500, NowUtc = now });
+                Check(disabled.Skipped && disabled.Deleted == 0 && File.Exists(old));
+                var first = CaptureCleanup.Run(inbox, new CleanupOptions { Days = 3, ThresholdMb = 500, NowUtc = now });
+                var second = CaptureCleanup.Run(inbox, new CleanupOptions { Days = 3, ThresholdMb = 500, NowUtc = now });
+                Check(first.Deleted == 1 && second.Deleted == 0 && second.RemainingBytes == 0 && second.ReachedThreshold);
+            });
+            Run("自动清理：只处理收集目录，外部原图保持原样", delegate
+            {
+                string rootFolder = Path.Combine(root, "cleanup-scope");
+                string inbox = Path.Combine(rootFolder, "Captures"), outside = Path.Combine(rootFolder, "outside");
+                DateTime now = new DateTime(2026, 11, 3, 12, 0, 0, DateTimeKind.Utc);
+                string original = CleanupFile(outside, "原图.png", 700, now.AddDays(-30));
+                string copy = CleanupFile(inbox, "副图.png", 700, now.AddDays(-30));
+                var result = CaptureCleanup.Run(inbox, new CleanupOptions { Days = 3, ThresholdMb = 500, NowUtc = now });
+                Check(!File.Exists(copy) && File.Exists(original) && result.Deleted == 1);
+            });
+            Run("自动清理：不跟随收集目录中的目录联接", delegate
+            {
+                string rootFolder = Path.Combine(root, "cleanup-link");
+                string inbox = Path.Combine(rootFolder, "Captures"), outside = Path.Combine(rootFolder, "outside");
+                Directory.CreateDirectory(inbox); Directory.CreateDirectory(outside);
+                DateTime now = new DateTime(2026, 11, 3, 12, 0, 0, DateTimeKind.Utc);
+                string target = CleanupFile(outside, "外部旧图.png", 900, now.AddDays(-30));
+                string link = Path.Combine(inbox, "junction");
+                bool linked = false;
+                try
+                {
+                    var start = new ProcessStartInfo("cmd.exe", "/c mklink /J \"" + link + "\" \"" + outside + "\"") { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
+                    using (var process = Process.Start(start)) { process.WaitForExit(); linked = process.ExitCode == 0 && Directory.Exists(link); }
+                }
+                catch (Exception) { }
+                if (!linked) return;
+                try
+                {
+                    var result = CaptureCleanup.Run(inbox, new CleanupOptions { Days = 3, ThresholdMb = 1, NowUtc = now });
+                    Check(result.Deleted == 0 && File.Exists(target));
+                }
+                finally { Directory.Delete(link); }
+            });
+            Run("自动清理：旧版设置按开启、三天、500 MB 兼容", delegate
+            {
+                string profile = Path.Combine(root, "cleanup-settings");
+                Directory.CreateDirectory(profile);
+                File.WriteAllText(Path.Combine(profile, "state.json"), "{\"Theme\":\"linen\"}");
+                var store = new StateStore(profile);
+                Check(store.State.AutoCleanEnabled && store.State.AutoCleanDays == 3 && store.State.AutoCleanThresholdMb == 500);
+                store.State.AutoCleanEnabled = false; store.State.AutoCleanDays = 7; store.State.AutoCleanThresholdMb = 1200;
+                store.Save();
+                var restored = new StateStore(profile);
+                Check(!restored.State.AutoCleanEnabled && restored.State.AutoCleanDays == 7 && restored.State.AutoCleanThresholdMb == 1200);
+            });
             Run("弹簧在不同帧率下有一致轨迹", delegate
             {
                 var slow = new SpringMotion(0.55, 0.78, 0) { Target = 172 };
@@ -341,6 +512,23 @@ namespace ScreenLine.Tests
         {
             string path = Path.Combine(root, name);
             File.WriteAllBytes(path, ImageContent.EncodeClipboard(Picture(color)));
+            return path;
+        }
+
+        static string WriteExport(string directory, string name, byte color)
+        {
+            Directory.CreateDirectory(directory);
+            string path = Path.Combine(directory, name);
+            File.WriteAllBytes(path, ImageContent.EncodeClipboard(Picture(color)));
+            return path;
+        }
+
+        static string CleanupFile(string directory, string name, int bytes, DateTime writtenUtc)
+        {
+            Directory.CreateDirectory(directory);
+            string path = Path.Combine(directory, name);
+            File.WriteAllBytes(path, new byte[bytes]);
+            File.SetLastWriteTimeUtc(path, writtenUtc);
             return path;
         }
 

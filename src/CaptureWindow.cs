@@ -15,6 +15,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Media.Effects;
 using System.Windows.Shapes;
 using System.Windows.Data;
+using System.Windows.Threading;
 using Microsoft.Win32;
 using Forms = System.Windows.Forms;
 
@@ -31,12 +32,123 @@ namespace ScreenLine
 
     internal sealed class CaptureSurface : FrameworkElement
     {
-        internal BitmapSource Picture;
-        internal Rect Selection = Rect.Empty;
-        internal Rect Hover = Rect.Empty;
+        readonly DrawingVisual baseLayer = new DrawingVisual();
+        readonly DrawingVisual markLayer = new DrawingVisual();
+        readonly DrawingVisual overlayLayer = new DrawingVisual();
         internal readonly List<CaptureMark> Marks = new List<CaptureMark>();
-        internal CaptureMark Pending;
-        internal double Scale = 1;
+        BitmapSource picture;
+        Rect selection = Rect.Empty, hover = Rect.Empty;
+        CaptureMark pending;
+        double scale = 1;
+        Point cursor;
+        bool showCursor;
+        long staticBuilds;
+
+        internal CaptureSurface()
+        {
+            AddVisualChild(baseLayer);
+            AddVisualChild(markLayer);
+            AddVisualChild(overlayLayer);
+            RenderOptions.SetBitmapScalingMode(this, BitmapScalingMode.NearestNeighbor);
+            SyncTransforms();
+        }
+
+        protected override int VisualChildrenCount { get { return 3; } }
+
+        protected override Visual GetVisualChild(int index)
+        {
+            if (index == 0) return baseLayer;
+            if (index == 1) return markLayer;
+            return overlayLayer;
+        }
+
+        internal BitmapSource Picture
+        {
+            get { return picture; }
+            set
+            {
+                if (picture == value) return;
+                picture = value;
+                RebuildBase(); RebuildMarks(); DrawOverlay();
+            }
+        }
+
+        internal Rect Selection
+        {
+            get { return selection; }
+            set
+            {
+                if (selection == value) return;
+                selection = value;
+                RebuildMarks(); DrawOverlay();
+            }
+        }
+
+        internal Rect Hover
+        {
+            get { return hover; }
+            set
+            {
+                if (hover == value) return;
+                hover = value; DrawOverlay();
+            }
+        }
+
+        internal CaptureMark Pending
+        {
+            get { return pending; }
+            set
+            {
+                if (pending == value) return;
+                pending = value; RebuildMarks(); DrawOverlay();
+            }
+        }
+
+        internal double Scale
+        {
+            get { return scale; }
+            set
+            {
+                double next = value > 0 ? value : 1;
+                if (scale == next) return;
+                scale = next; SyncTransforms(); RebuildMarks(); DrawOverlay();
+            }
+        }
+
+        // 鼠标移动只重画选框和十字线，底图与标注层保持原样。
+        internal long StaticLayerBuilds { get { return staticBuilds; } }
+
+        internal void SetCursor(Point point, bool visible)
+        {
+            if (cursor == point && showCursor == visible) return;
+            cursor = point; showCursor = visible; DrawOverlay();
+        }
+
+        internal void SetCursorVisible(bool visible)
+        {
+            if (showCursor == visible) return;
+            showCursor = visible; DrawOverlay();
+        }
+
+        internal void Refresh() { RebuildMarks(); DrawOverlay(); InvalidateVisual(); }
+
+        void SyncTransforms()
+        {
+            var transform = new ScaleTransform(1 / scale, 1 / scale);
+            transform.Freeze();
+            baseLayer.Transform = transform;
+            markLayer.Transform = transform;
+            overlayLayer.Transform = transform;
+        }
+
+        void RebuildBase()
+        {
+            using (var drawing = baseLayer.RenderOpen())
+            {
+                if (picture != null) drawing.DrawImage(picture, new Rect(0, 0, picture.PixelWidth, picture.PixelHeight));
+            }
+            staticBuilds++;
+        }
 
         internal static Rect Region(Point start, Point end, Rect bounds)
         {
@@ -68,6 +180,58 @@ namespace ScreenLine
             if (Pending != null) DrawMark(drawing, Pending);
             drawing.Pop();
         }
+
+        void RebuildMarks()
+        {
+            using (var drawing = markLayer.RenderOpen())
+            {
+                if (picture == null || selection.IsEmpty) return;
+                drawing.PushClip(new RectangleGeometry(selection));
+                foreach (var mark in Marks) DrawMark(drawing, mark);
+                if (pending != null) DrawMark(drawing, pending);
+                drawing.Pop();
+            }
+        }
+
+        void DrawOverlay()
+        {
+            using (var drawing = overlayLayer.RenderOpen())
+            {
+                if (picture == null) return;
+                double width = picture.PixelWidth, height = picture.PixelHeight;
+                var full = new Rect(0, 0, width, height);
+                Rect highlight = selection.IsEmpty ? hover : selection;
+                var shade = new SolidColorBrush(Color.FromArgb(125, 0, 0, 0));
+                shade.Freeze();
+                if (highlight.IsEmpty)
+                    drawing.DrawRectangle(shade, null, full);
+                else
+                {
+                    highlight.Intersect(full);
+                    drawing.DrawRectangle(shade, null, new Rect(0, 0, width, highlight.Top));
+                    drawing.DrawRectangle(shade, null, new Rect(0, highlight.Bottom, width, height - highlight.Bottom));
+                    drawing.DrawRectangle(shade, null, new Rect(0, highlight.Top, highlight.Left, highlight.Height));
+                    drawing.DrawRectangle(shade, null, new Rect(highlight.Right, highlight.Top, width - highlight.Right, highlight.Height));
+                }
+                if (selection.IsEmpty && !hover.IsEmpty)
+                    drawing.DrawRectangle(null, BorderPen(), hover);
+                if (!selection.IsEmpty)
+                {
+                    drawing.DrawRectangle(null, BorderPen(), selection);
+                    foreach (double x in new[] { selection.Left, selection.Right })
+                        foreach (double y in new[] { selection.Top, selection.Bottom })
+                            drawing.DrawRectangle(Brushes.White, new Pen(Brushes.DodgerBlue, scale), new Rect(x - 3 * scale, y - 3 * scale, 6 * scale, 6 * scale));
+                }
+                else if (showCursor)
+                {
+                    var cross = new Pen(new SolidColorBrush(Color.FromArgb(190, 255, 255, 255)), Math.Max(0.5, scale));
+                    drawing.DrawLine(cross, new Point(0, cursor.Y), new Point(width, cursor.Y));
+                    drawing.DrawLine(cross, new Point(cursor.X, 0), new Point(cursor.X, height));
+                }
+            }
+        }
+
+        Pen BorderPen() { return new Pen(new SolidColorBrush(Color.FromRgb(71, 153, 255)), Math.Max(1, scale)); }
 
         void DrawMark(DrawingContext drawing, CaptureMark mark)
         {
@@ -105,28 +269,6 @@ namespace ScreenLine
             }
         }
 
-        protected override void OnRender(DrawingContext drawing)
-        {
-            drawing.PushTransform(new ScaleTransform(1 / Scale, 1 / Scale));
-            DrawPicture(drawing);
-            if (Picture != null)
-            {
-                var outer = new RectangleGeometry(new Rect(0, 0, Picture.PixelWidth, Picture.PixelHeight));
-                Rect highlight = Selection.IsEmpty ? Hover : Selection;
-                Geometry shade = highlight.IsEmpty ? (Geometry)outer : new CombinedGeometry(GeometryCombineMode.Exclude, outer, new RectangleGeometry(highlight));
-                drawing.DrawGeometry(new SolidColorBrush(Color.FromArgb(125, 0, 0, 0)), null, shade);
-                if (Selection.IsEmpty && !Hover.IsEmpty)
-                    drawing.DrawRectangle(null, new Pen(new SolidColorBrush(Color.FromRgb(71, 153, 255)), Scale), Hover);
-                if (!Selection.IsEmpty)
-                {
-                    drawing.DrawRectangle(null, new Pen(new SolidColorBrush(Color.FromRgb(71, 153, 255)), Scale), Selection);
-                    foreach (double x in new[] { Selection.Left, Selection.Right })
-                        foreach (double y in new[] { Selection.Top, Selection.Bottom })
-                            drawing.DrawRectangle(Brushes.White, new Pen(Brushes.DodgerBlue, Scale), new Rect(x - 3 * Scale, y - 3 * Scale, 6 * Scale, 6 * Scale));
-                }
-            }
-            drawing.Pop();
-        }
     }
 
     internal sealed class CaptureWindow : Window
@@ -152,16 +294,16 @@ namespace ScreenLine
         bool selecting, moving, drawing, finished;
         internal Rect Selection { get { return Surface.Selection; } }
 
-        internal CaptureWindow(Forms.Screen screen, BitmapSource picture = null)
+        internal CaptureWindow(Forms.Screen screen, BitmapSource picture = null, List<Rect> windowSnapshot = null)
         {
             scale = WindowsNative.MonitorScale(screen);
             Title = "区域截图 · 图绳";
             WindowStyle = WindowStyle.None; ResizeMode = ResizeMode.NoResize; ShowInTaskbar = false;
             Topmost = true; Background = Brushes.Black; Cursor = Cursors.Cross;
             Width = screen.Bounds.Width / scale; Height = screen.Bounds.Height / scale;
-            Surface.Picture = picture ?? ReadScreen(screen); Surface.Scale = scale;
-            windows = CaptureWindows.Snapshot(screen);
-            RenderOptions.SetBitmapScalingMode(Surface, BitmapScalingMode.NearestNeighbor);
+            Surface.Scale = scale;
+            Surface.Picture = picture ?? CaptureShotRules.ReadScreen(screen);
+            windows = windowSnapshot ?? CaptureWindows.Snapshot(screen);
             var root = new Grid(); root.Children.Add(Surface); root.Children.Add(controls); Content = root;
             var rows = new WrapPanel { Orientation = Orientation.Horizontal, MaxWidth = Math.Max(200, Width - 16) };
             var drawingTools = new StackPanel { Orientation = Orientation.Horizontal };
@@ -223,8 +365,13 @@ namespace ScreenLine
             };
             Loaded += delegate
             {
-                Activate(); WindowsNative.ActivateEditor(new WindowInteropHelper(this).Handle); Focus(); UpdateTools();
-                var cursor = WindowsNative.Cursor(); HoverAt(new Point(cursor.X - screen.Bounds.Left, cursor.Y - screen.Bounds.Top));
+                // 首次显示先完成窗口合成；激活、工具栏状态和光标命中放到
+                // 输入优先级，避免这些工作拖慢全屏遮罩的首帧。
+                Dispatcher.BeginInvoke(new Action(delegate
+                {
+                    Activate(); WindowsNative.ActivateEditor(new WindowInteropHelper(this).Handle); Focus(); UpdateTools();
+                    var cursor = WindowsNative.Cursor(); HoverAt(new Point(cursor.X - screen.Bounds.Left, cursor.Y - screen.Bounds.Top));
+                }), DispatcherPriority.Input);
             };
             Closed += delegate { Surface.Picture = null; Surface.Marks.Clear(); Surface.Pending = null; redo.Clear(); completion.TrySetResult(null); };
         }
@@ -253,22 +400,7 @@ namespace ScreenLine
 
         internal Task<BitmapSource> PickAsync() { Show(); return completion.Task; }
 
-        internal static BitmapSource ReadScreen(Forms.Screen display)
-        {
-            var bounds = display.Bounds;
-            using (var bitmap = new System.Drawing.Bitmap(bounds.Width, bounds.Height, System.Drawing.Imaging.PixelFormat.Format32bppArgb))
-            {
-                using (var graphics = System.Drawing.Graphics.FromImage(bitmap)) graphics.CopyFromScreen(bounds.Left, bounds.Top, 0, 0, bounds.Size);
-                var bits = bitmap.LockBits(new System.Drawing.Rectangle(0, 0, bounds.Width, bounds.Height), System.Drawing.Imaging.ImageLockMode.ReadOnly, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
-                try
-                {
-                    byte[] pixels = new byte[bits.Stride * bounds.Height]; Marshal.Copy(bits.Scan0, pixels, 0, pixels.Length);
-                    for (int i = 3; i < pixels.Length; i += 4) pixels[i] = 255;
-                    var image = BitmapSource.Create(bounds.Width, bounds.Height, 96, 96, PixelFormats.Bgra32, null, pixels, bits.Stride); image.Freeze(); return image;
-                }
-                finally { bitmap.UnlockBits(bits); }
-            }
-        }
+        internal static BitmapSource ReadScreen(Forms.Screen display) { return CaptureShotRules.ReadScreen(display); }
 
         Point Pixel(MouseEventArgs e)
         {
@@ -308,6 +440,7 @@ namespace ScreenLine
         {
             var point = Pixel(e);
             if (!selecting && !drawing) { if (Selection.IsEmpty) HoverAt(point); return; }
+            Surface.SetCursor(point, false);
             if (selecting)
             {
                 var bounds = new Rect(0, 0, Surface.Picture.PixelWidth, Surface.Picture.PixelHeight);
@@ -339,9 +472,10 @@ namespace ScreenLine
 
         internal void HoverAt(Point point)
         {
+            Surface.SetCursor(point, Selection.IsEmpty);
             Rect candidate = CaptureWindows.At(windows, point);
             if (candidate == Surface.Hover) return;
-            Surface.Hover = candidate; Surface.InvalidateVisual();
+            Surface.Hover = candidate;
         }
 
         internal void Select(Rect region)
@@ -353,7 +487,8 @@ namespace ScreenLine
 
         void UpdateSelection(bool show)
         {
-            Surface.InvalidateVisual(); UpdateTools();
+            Surface.SetCursorVisible(Selection.IsEmpty);
+            Surface.Refresh(); UpdateTools();
             if (Selection.IsEmpty) { toolbar.Visibility = Visibility.Collapsed; return; }
             dimensions.Text = (int)Selection.Width + " × " + (int)Selection.Height;
             Canvas.SetLeft(badge, Math.Max(6, Selection.Left / scale)); Canvas.SetTop(badge, Math.Max(6, Selection.Top / scale - 30));
@@ -381,7 +516,7 @@ namespace ScreenLine
             {
                 Surface.Marks.Add(new CaptureMark { Tool = "文字", Text = text.Text, Start = textOrigin, End = textOrigin, Color = color, Size = thickness * scale }); redo.Clear();
             }
-            text.Clear(); text.Visibility = Visibility.Collapsed; Surface.InvalidateVisual(); UpdateTools();
+            text.Clear(); text.Visibility = Visibility.Collapsed; Surface.Refresh(); UpdateTools();
         }
 
         internal void Undo() { CommitText(); if (Surface.Marks.Count > 0) { redo.Push(Surface.Marks[Surface.Marks.Count - 1]); Surface.Marks.RemoveAt(Surface.Marks.Count - 1); } UpdateSelection(true); }

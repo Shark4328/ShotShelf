@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -55,6 +56,14 @@ namespace ScreenLine.Tests
                 for (int i = 0; i < 60 && FindWindow(null, "图绳截图测试窗口乙") == IntPtr.Zero; i++) await Task.Delay(50);
                 await Task.Delay(150);
                 var screen = Forms.Screen.PrimaryScreen;
+                int uiThread = Thread.CurrentThread.ManagedThreadId;
+                var captureTimer = Stopwatch.StartNew();
+                var shot = await CaptureShotRules.CaptureAsync(screen);
+                captureTimer.Stop();
+                Check(shot.ReadThreadId != uiThread, "整屏抓取在后台 STA 线程执行");
+                Check(shot.Picture.PixelWidth == screen.Bounds.Width && shot.Picture.PixelHeight == screen.Bounds.Height, "后台抓取覆盖目标显示器完整像素");
+                Check(shot.Windows.Count > 0, "窗口枚举快照随抓屏一次性返回");
+                Check(captureTimer.ElapsedMilliseconds <= 300, "后台抓屏在 300ms 内完成，实际 " + captureTimer.ElapsedMilliseconds + "ms");
                 var candidates = CaptureWindows.Snapshot(screen, 0);
                 var work = screen.WorkingArea;
                 var desktop = new Rect(work.Left - screen.Bounds.Left, work.Top - screen.Bounds.Top, work.Width, work.Height);
@@ -81,7 +90,31 @@ namespace ScreenLine.Tests
                 var narrow = new CaptureSurface { Picture = picture, Selection = new Rect(0, 0, 100, 100) };
                 narrow.Marks.Add(new CaptureMark { Tool = "马赛克", Start = new Point(10, 10), End = new Point(12, 90), Size = 3 });
                 Check(narrow.Export().PixelWidth == 100, "窄条马赛克可正常导出");
-                capture = new CaptureWindow(screen, picture); var completion = capture.PickAsync(); await Task.Delay(200);
+                var warmup = new CaptureWindow(screen, picture); warmup.Show(); warmup.UpdateLayout(); await Task.Delay(60); warmup.Close(); await Task.Delay(60);
+                var readyTimer = Stopwatch.StartNew();
+                capture = new CaptureWindow(screen, picture);
+                long buildMilliseconds = readyTimer.ElapsedMilliseconds;
+                var completion = capture.PickAsync();
+                long showMilliseconds = readyTimer.ElapsedMilliseconds - buildMilliseconds;
+                await Task.Delay(200);
+                Console.WriteLine("截图性能：抓取 " + captureTimer.ElapsedMilliseconds + "ms，构建 " + buildMilliseconds + "ms，显示 " + showMilliseconds + "ms");
+                Check(buildMilliseconds <= 50, "截图窗口构建不阻塞 UI 线程超过 50ms，实际 " + buildMilliseconds + "ms");
+                Check(showMilliseconds <= 50, "遮罩显示不阻塞 UI 线程超过 50ms，实际 " + showMilliseconds + "ms");
+                Check(capture.Surface.StaticLayerBuilds == 1, "单次截图只建立一层静态底图");
+                long staticBuilds = capture.Surface.StaticLayerBuilds;
+                for (int i = 0; i < 6; i++)
+                {
+                    SetCursorPos(screen.Bounds.Left + 300 + i * 35, screen.Bounds.Top + 300 + i * 12);
+                    await Task.Delay(30);
+                }
+                Check(capture.Surface.StaticLayerBuilds == staticBuilds, "连续移动鼠标只刷新动态层，静态底图不重建");
+                string appSource = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "App.cs"));
+                if (File.Exists(appSource))
+                {
+                    string source = File.ReadAllText(appSource);
+                    Check(!source.Contains("Task.Delay(260)"), "截图流程不再固定等待 260ms");
+                    Check(source.Contains("Shelf.HideForCapture()") && source.Contains("await Shelf.WaitHidden()") && source.Contains("await CaptureShotRules.CaptureAsync(display)"), "抓屏在货架实际隐藏后交给后台完成");
+                }
                 SetCursorPos(screen.Bounds.Left + 250, screen.Bounds.Top + 180); await Task.Delay(80);
                 mouse_event(2, 0, 0, 0, UIntPtr.Zero); mouse_event(4, 0, 0, 0, UIntPtr.Zero); await Task.Delay(120);
                 Check(capture.Selection == upper, "单击自动识别的窗口并建立选区");
@@ -117,6 +150,22 @@ namespace ScreenLine.Tests
                 SetCursorPos(screen.Bounds.Left + (int)taskbarPoint.X, screen.Bounds.Top + (int)taskbarPoint.Y); await Task.Delay(80);
                 mouse_event(2, 0, 0, 0, UIntPtr.Zero); mouse_event(4, 0, 0, 0, UIntPtr.Zero); await Task.Delay(100);
                 Check(capture.Selection == taskbarBounds, "单击任务栏即可选中完整区域");
+                capture.Close(); capture = null;
+                string shelfRoot = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "test-data", "shelf-" + Guid.NewGuid().ToString("N"));
+                Directory.CreateDirectory(shelfRoot);
+                var shelf = new ShelfWindow(new Gallery(new StateStore(shelfRoot)), delegate { }, delegate { });
+                try
+                {
+                    shelf.Show(); shelf.Reveal(true, true, 60); await Task.Delay(350);
+                    var hideTimer = Stopwatch.StartNew();
+                    shelf.HideForCapture();
+                    await shelf.WaitHidden();
+                    hideTimer.Stop();
+                    Check(!shelf.Revealed, "截图前货架已完成收起");
+                    Check(hideTimer.ElapsedMilliseconds >= 80 && hideTimer.ElapsedMilliseconds <= 300,
+                        "等待货架真实收起完成，实际 " + hideTimer.ElapsedMilliseconds + "ms");
+                }
+                finally { shelf.Close(); }
             }
             finally
             {
