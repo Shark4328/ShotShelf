@@ -506,13 +506,14 @@ namespace ScreenLine
 
         public void ShowNewCapture(CaptureItem item, Point? origin)
         {
+            // 内置截图与剪贴板收集共用这一段；origin 仅由文件夹导入提供，用于额外飞入。
             MoveToDisplay();
             Reveal(true, false, 2);
             scrollMotion.Target = ScrollLimit;
             ropeMotion.Velocity += 8;
             if (!Revealed || !origin.HasValue || flights.Count(f => !f.Falling && !f.Collecting) >= 2) return;
-            ShotCard card = cards[item.Path];
-            if (card.Detached) return;
+            ShotCard card;
+            if (!cards.TryGetValue(item.Path, out card) || card.Detached) return;
             card.BeginFlight();
             var bounds = Display.Bounds;
             double scale = Math.Min(1, Math.Min(bounds.Width * 0.7 / item.Image.PixelWidth, bounds.Height * 0.7 / item.Image.PixelHeight));

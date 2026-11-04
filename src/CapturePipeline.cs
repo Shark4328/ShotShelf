@@ -31,8 +31,8 @@ namespace ScreenLine
         uint clipboardSequence;
         DateTime clipboardDue = DateTime.MaxValue;
         bool clipboardBusy, disposed;
-        Point? clipboardOrigin;
         int ticks;
+        // origin 只用于文件夹导入的飞入起点；内置截图与剪贴板收集传 null，保证到达动画一致。
         public event Action<CaptureItem, Point?> Arrived;
         public event Action<CaptureItem> Stored;
         public event Action<string> Failed;
@@ -126,11 +126,7 @@ namespace ScreenLine
         public void ClipboardChanged()
         {
             if (CollectClipboard && WindowsNative.GetClipboardSequenceNumber() != clipboardSequence)
-            {
-                var cursor = WindowsNative.Cursor();
-                clipboardOrigin = new Point(cursor.X, cursor.Y);
                 clipboardDue = DateTime.UtcNow.AddMilliseconds(160);
-            }
         }
 
         void Tick(object sender, EventArgs args)
@@ -261,7 +257,6 @@ namespace ScreenLine
         {
             clipboardBusy = true;
             uint sequence = WindowsNative.GetClipboardSequenceNumber();
-            Point? origin = clipboardOrigin;
             try
             {
                 if (!CollectClipboard || sequence == clipboardSequence) return;
@@ -279,7 +274,8 @@ namespace ScreenLine
                 else
                 {
                     gallery.Add(path, content);
-                    if (Arrived != null) Arrived(gallery.Items[gallery.Items.Count - 1], origin);
+                    // 与 Ctrl+Alt+S 相同：只做货架展开、绳子回弹和卡片淡入，不创建卡片飞行。
+                    if (Arrived != null) Arrived(gallery.Items[gallery.Items.Count - 1], null);
                 }
             }
             catch (Exception error)

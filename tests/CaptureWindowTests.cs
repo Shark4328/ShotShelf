@@ -123,6 +123,12 @@ namespace ScreenLine.Tests
                 Check(shelfCode.Contains("internal async Task<bool> WaitHidden()") && shelfCode.Contains("Task.Delay(600)") && shelfCode.Contains("completed == waiter.Task"),
                     "货架隐藏等待有 600ms 超时并返回真实完成状态");
                 Check(shelfCode.Contains("internal void HideImmediately()") && shelfCode.Contains("internal void RestoreVisibility()"), "截图流程提供立即隐藏与可见性恢复");
+                string pipelineSource = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "src", "CapturePipeline.cs"));
+                Check(File.Exists(pipelineSource), "剪贴板管道源码可正确定位");
+                string pipelineCode = File.ReadAllText(pipelineSource);
+                Check(!pipelineCode.Contains("clipboardOrigin"), "剪贴板到达不再记录鼠标起点");
+                Check(pipelineCode.Contains("Arrived(gallery.Items[gallery.Items.Count - 1], null)"), "剪贴板截图与内置截图共用同一到达动画");
+                Check(shelfCode.Contains("origin.HasValue") && shelfCode.Contains("PlayFlight(new ShotFlight"), "文件夹导入仍保留飞入动画");
                 string themeSource = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "src", "LightTheme.cs"));
                 string flightSource = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "src", "ShotFlight.cs"));
                 Check(File.Exists(themeSource) && File.Exists(flightSource), "渲染源码路径可正确定位");

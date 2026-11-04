@@ -280,6 +280,7 @@ namespace ScreenLine.Tests
                 gallery.Add(path, ImageContent.Read(path));
                 shelf.ShowNewCapture(gallery.Items.Single(), null);
                 Check(shelf.Revealed && shelf.Display == secondary, label + "鼠标在主屏时新截图仍挂到固定副屏");
+                Check(!shelf.MotionWindows.Any(), label + "剪贴板与内置截图到达不创建飞行动画");
                 shelf.ShowEditedImage(path, new Rect(500, 300, 300, 200), gallery.Items.Single().Image.Thumbnail);
                 Check(shelf.Display == secondary, label + "编辑完成后仍使用设置中的固定副屏");
                 foreach (var flight in shelf.MotionWindows.ToArray()) flight.Close();

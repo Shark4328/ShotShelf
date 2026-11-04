@@ -52,7 +52,7 @@ namespace ScreenLine.Tests
                     }
                     clipboard = snapshot;
                 }
-                try { await Run(); Console.WriteLine("1.0.3 专项验证：{0} 项通过", checks); }
+            try { await Run(); Console.WriteLine("1.0.4 专项验证：{0} 项通过", checks); }
                 catch (Exception error) { Console.WriteLine("专项验证失败：" + error); Environment.ExitCode = 1; }
                 finally
                 {
@@ -334,8 +334,8 @@ namespace ScreenLine.Tests
             SetCursorPos((int)origin.X, (int)origin.Y); mouse_event(2, 0, 0, 0, UIntPtr.Zero); mouse_event(4, 0, 0, 0, UIntPtr.Zero); await Task.Delay(40);
             var input = ((Canvas)((Grid)capture.Content).Children[1]).Children.OfType<TextBox>().Single();
             Check(input.IsVisible && input.IsKeyboardFocused, "文字工具打开原地输入框");
-            input.Text = "截图标注 · 图架 1.0.3"; Click(capture.Tools["选择"]);
-            Check(capture.Surface.Marks.Last().Text == "截图标注 · 图架 1.0.3", "文字标注保留中文内容");
+            input.Text = "截图标注 · 图架 1.0.4"; Click(capture.Tools["选择"]);
+            Check(capture.Surface.Marks.Last().Text == "截图标注 · 图架 1.0.4", "文字标注保留中文内容");
             Export("区域截图与基础编辑", capture);
             await Drag(new Point(120, 160), new Point(140, 180));
             Check(capture.Selection == new Rect(140, 180, 620, 360), "拖动选区角点可调整截图边界");
