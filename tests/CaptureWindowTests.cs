@@ -91,16 +91,21 @@ namespace ScreenLine.Tests
                 narrow.Marks.Add(new CaptureMark { Tool = "马赛克", Start = new Point(10, 10), End = new Point(12, 90), Size = 3 });
                 Check(narrow.Export().PixelWidth == 100, "窄条马赛克可正常导出");
                 var warmup = new CaptureWindow(screen, picture); warmup.Show(); warmup.UpdateLayout(); await Task.Delay(60); warmup.Close(); await Task.Delay(60);
+                var blank = BitmapSource.Create(1, 1, 96, 96, PixelFormats.Bgra32, null, new byte[] { 0, 0, 0, 255 }, 4); blank.Freeze();
+                var buildTimer = Stopwatch.StartNew();
+                capture = new CaptureWindow(screen, blank);
+                long buildMilliseconds = buildTimer.ElapsedMilliseconds;
+                capture.Warm(); await Task.Delay(80);
+                long staticBeforePrepare = capture.Surface.StaticLayerBuilds;
+                capture.Prepare(picture, shot.Windows);
+                Check(capture.Surface.StaticLayerBuilds == staticBeforePrepare + 1, "载入新截图只重建一次静态底图");
                 var readyTimer = Stopwatch.StartNew();
-                capture = new CaptureWindow(screen, picture);
-                long buildMilliseconds = readyTimer.ElapsedMilliseconds;
                 var completion = capture.PickAsync();
-                long showMilliseconds = readyTimer.ElapsedMilliseconds - buildMilliseconds;
+                long showMilliseconds = readyTimer.ElapsedMilliseconds;
                 await Task.Delay(200);
                 Console.WriteLine("截图性能：抓取 " + captureTimer.ElapsedMilliseconds + "ms，构建 " + buildMilliseconds + "ms，显示 " + showMilliseconds + "ms");
                 Check(buildMilliseconds <= 50, "截图窗口构建不阻塞 UI 线程超过 50ms，实际 " + buildMilliseconds + "ms");
                 Check(showMilliseconds <= 50, "遮罩显示不阻塞 UI 线程超过 50ms，实际 " + showMilliseconds + "ms");
-                Check(capture.Surface.StaticLayerBuilds == 1, "单次截图只建立一层静态底图");
                 long staticBuilds = capture.Surface.StaticLayerBuilds;
                 for (int i = 0; i < 6; i++)
                 {
@@ -118,6 +123,23 @@ namespace ScreenLine.Tests
                 Check(shelfCode.Contains("internal async Task<bool> WaitHidden()") && shelfCode.Contains("Task.Delay(600)") && shelfCode.Contains("completed == waiter.Task"),
                     "货架隐藏等待有 600ms 超时并返回真实完成状态");
                 Check(shelfCode.Contains("internal void HideImmediately()") && shelfCode.Contains("internal void RestoreVisibility()"), "截图流程提供立即隐藏与可见性恢复");
+                string themeSource = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "src", "LightTheme.cs"));
+                string flightSource = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "src", "ShotFlight.cs"));
+                Check(File.Exists(themeSource) && File.Exists(flightSource), "渲染源码路径可正确定位");
+                string themeCode = File.ReadAllText(themeSource), flightCode = File.ReadAllText(flightSource);
+                Check(!themeCode.Contains("SoftwareOnly") && !themeCode.Contains("ProcessRenderMode"), "主题安装不再强制软件渲染，WPF 按系统能力使用 GPU");
+                Console.WriteLine("渲染层级：Tier " + (RenderCapability.Tier >> 16));
+                int visualStart = flightCode.IndexOf("void SetVisual(");
+                int visualEnd = flightCode.IndexOf("static BitmapSource RenderPhoto(");
+                Check(visualStart > 0 && visualEnd > visualStart, "飞行窗口的逐帧方法可定位");
+                string visualCode = flightCode.Substring(visualStart, visualEnd - visualStart);
+                Check(!visualCode.Contains("Width =") && !visualCode.Contains("Height =") && !visualCode.Contains("Margin =") && !visualCode.Contains("CornerRadius"),
+                    "飞行逐帧只移动窗口，不修改布局属性");
+                Check(!visualCode.Contains("new SolidColorBrush") && !visualCode.Contains("new RectangleGeometry") && !visualCode.Contains("DropShadowEffect"),
+                    "飞行逐帧不新建画刷、裁剪几何或阴影");
+                Check(flightCode.Contains("CompositionTarget.Rendering += Tick") && flightCode.IndexOf("CompositionTarget.Rendering += Tick") == flightCode.LastIndexOf("CompositionTarget.Rendering += Tick"),
+                    "所有飞行卡片共用一条渲染循环");
+                Check(flightCode.Contains("0x400"), "逐帧移动窗口时抑制 WM_WINDOWPOSCHANGING，避免每次 15ms 的 UI 停顿");
                 SetCursorPos(screen.Bounds.Left + 250, screen.Bounds.Top + 180); await Task.Delay(80);
                 mouse_event(2, 0, 0, 0, UIntPtr.Zero); mouse_event(4, 0, 0, 0, UIntPtr.Zero); await Task.Delay(120);
                 Check(capture.Selection == upper, "单击自动识别的窗口并建立选区");

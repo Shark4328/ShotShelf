@@ -49,8 +49,6 @@ namespace ScreenLine
         public static SolidColorBrush Brush(string value) { return (SolidColorBrush)new BrushConverter().ConvertFromString(value); }
         public static void Install(Application app)
         {
-            // 小型透明挂件使用软件绘制，避免反复开关面板积累大块图形缓存。
-            RenderOptions.ProcessRenderMode = System.Windows.Interop.RenderMode.SoftwareOnly;
             app.Resources[typeof(ToolTip)] = styles["Hint"];
         }
 

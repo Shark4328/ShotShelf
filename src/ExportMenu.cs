@@ -97,18 +97,37 @@ namespace ScreenLine
         void Build(MenuItem header, Menu shell, ExportScope scope, Action<ExportScope, ExportFormat> export)
         {
             header.Width = 190; header.FontFamily = FontFamily; header.FontSize = FontSize;
+            AutomationProperties.SetName(header, scope == ExportScope.Selected ? "导出所选" : "导出全部");
             foreach (var entry in new[] {
                 new KeyValuePair<ExportFormat, string>(ExportFormat.Folder, "复制到文件夹…"),
                 new KeyValuePair<ExportFormat, string>(ExportFormat.Zip, "打包为 ZIP…") })
             {
                 ExportFormat format = entry.Key;
                 var child = new MenuItem { Header = entry.Value, Style = choiceStyle };
+                AutomationProperties.SetName(child, (scope == ExportScope.Selected ? "所选" : "全部") + (format == ExportFormat.Folder ? "：复制到文件夹" : "：打包为 ZIP"));
                 child.Click += delegate { IsOpen = false; export(scope, format); };
                 child.MouseEnter += delegate { close.Stop(); };
                 child.MouseLeave += delegate { close.Start(); };
                 header.Items.Add(child);
             }
             header.MouseEnter += delegate { close.Stop(); header.IsSubmenuOpen = true; };
+            header.MouseLeftButtonDown += delegate(object sender, MouseButtonEventArgs args)
+            {
+                close.Stop();
+                if (!header.IsEnabled) return;
+                header.IsSubmenuOpen = true;
+                header.Dispatcher.BeginInvoke(new Action(delegate
+                {
+                    foreach (var entry in header.Items)
+                    {
+                        var child = entry as MenuItem;
+                        if (child == null) continue;
+                        child.Focus();
+                        break;
+                    }
+                }), System.Windows.Threading.DispatcherPriority.Input);
+                args.Handled = true;
+            };
             header.MouseLeave += delegate { if (header.IsSubmenuOpen) close.Start(); };
             header.PreviewKeyDown += delegate(object sender, KeyEventArgs args)
             {

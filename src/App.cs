@@ -19,9 +19,9 @@ using Forms = System.Windows.Forms;
 [assembly: AssemblyTitle("ShotShelf · 图架")]
 [assembly: AssemblyProduct("ShotShelf")]
 [assembly: AssemblyDescription("图架：把截图挂在屏幕上沿，随手复制、拖拽和保存。")]
-[assembly: AssemblyVersion("1.0.2.0")]
-[assembly: AssemblyFileVersion("1.0.2.0")]
-[assembly: AssemblyInformationalVersion("1.0.2")]
+[assembly: AssemblyVersion("1.0.3.0")]
+[assembly: AssemblyFileVersion("1.0.3.0")]
+[assembly: AssemblyInformationalVersion("1.0.3")]
 
 namespace ScreenLine
 {
@@ -42,6 +42,7 @@ namespace ScreenLine
         internal BasketWindow Basket { get; private set; }
         internal TextWindow TextWindow { get; private set; }
         internal CaptureWindow Capture { get; private set; }
+        CaptureWindow capturePool;
         internal ShortcutWindow ShortcutSettings { get; private set; }
         CleanupWindow cleanupWindow;
         bool cleaning;
@@ -184,10 +185,23 @@ namespace ScreenLine
         {
             Shelf.Show();
             Shelf.Reveal(true, false, 4);
+            WarmCapture();
             await Captures.Start();
             if (automaticUpdates) updateTimer.Start();
             cleanupTimer.Start();
             await RunCleanup();
+        }
+
+        // 启动时以透明方式创建并显示一次截图窗口，避免首次截图时新建全屏
+        // 硬件窗口带来的约 130ms UI 阻塞；之后每次截图复用同一个窗口句柄。
+        void WarmCapture()
+        {
+            if (capturePool != null || disposed) return;
+            var display = WindowsNative.ScreenAtPointer();
+            var blank = BitmapSource.Create(1, 1, 96, 96, System.Windows.Media.PixelFormats.Bgra32, null, new byte[] { 0, 0, 0, 255 }, 4);
+            blank.Freeze();
+            capturePool = new CaptureWindow(display, blank);
+            capturePool.Warm();
         }
 
         void UpdateCaptureLabel()
@@ -225,7 +239,13 @@ namespace ScreenLine
                 if (disposed) return;
                 var shot = await CaptureSource(display);
                 if (disposed) return;
-                Capture = new CaptureWindow(display, shot.Picture, shot.Windows);
+                if (capturePool == null || !capturePool.Matches(display))
+                {
+                    if (capturePool != null) capturePool.Close();
+                    capturePool = new CaptureWindow(display);
+                }
+                capturePool.Prepare(shot.Picture, shot.Windows);
+                Capture = capturePool;
                 var result = await Capture.PickAsync(); Capture = null;
                 if (disposed) return;
                 if (result != null) await Captures.AcceptCapture(result);
@@ -240,7 +260,7 @@ namespace ScreenLine
             }
             finally
             {
-                if (Capture != null) Capture.Close();
+                if (Capture != null) Capture.Cancel();
                 Capture = null;
                 Shelf.RestoreVisibility();
                 // 截图窗口关闭后恢复截图前的展开状态；初始隐藏则保持隐藏。
@@ -474,18 +494,7 @@ namespace ScreenLine
                         Gallery.RemoveMany(targets);
                         break;
                     case ShotAction.Copy:
-                        var payload = new DataObject();
-                        byte[] png;
-                        using (var stream = new FileStream(item.Path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
-                        {
-                            var image = BitmapDecoder.Create(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad).Frames[0];
-                            payload.SetImage(image);
-                            png = ImageContent.EncodeClipboard(image);
-                        }
-                        payload.SetData("PNG", new MemoryStream(png));
-                        payload.SetFileDropList(new StringCollection { item.Path });
-                        payload.SetData(ClipboardRules.OwnFormat, "1");
-                        await WindowsClipboard.Write(payload);
+                        await WindowsClipboard.Write(ShotClipboard.Build(new[] { item.Path }, true));
                         Shelf.ShowCopied(item.Path);
                         break;
                     case ShotAction.Open:
@@ -548,7 +557,8 @@ namespace ScreenLine
         public void Dispose()
         {
             disposed = true; updateTimer.Stop(); cleanupTimer.Stop(); updateLifetime.Cancel();
-            if (Capture != null) Capture.Close();
+            if (capturePool != null) { capturePool.Close(); capturePool = null; }
+            Capture = null;
             if (ShortcutSettings != null) ShortcutSettings.Close();
             if (updateWindow != null) updateWindow.Close();
             updates.Dispose();

@@ -275,15 +275,19 @@ namespace ScreenLine
     {
         internal readonly CaptureSurface Surface = new CaptureSurface();
         internal readonly Dictionary<string, Button> Tools = new Dictionary<string, Button>();
-        readonly TaskCompletionSource<BitmapSource> completion = new TaskCompletionSource<BitmapSource>(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource<BitmapSource> completion = NewCompletion();
         readonly Canvas controls = new Canvas();
         readonly Border toolbar;
         readonly TextBlock dimensions = new TextBlock { Foreground = Brushes.White, FontSize = 12, Margin = new Thickness(8, 4, 8, 4) };
         readonly Border badge;
         readonly TextBox text = new TextBox { MinWidth = 160, MaxWidth = 480, FontFamily = new FontFamily("Microsoft YaHei UI"), FontSize = 21, Padding = new Thickness(4), Visibility = Visibility.Collapsed };
         readonly Stack<CaptureMark> redo = new Stack<CaptureMark>();
-        readonly List<Rect> windows;
-        readonly double scale;
+        readonly List<Border> swatches = new List<Border>();
+        readonly List<Button> widths = new List<Button>();
+        WrapPanel rows;
+        List<Rect> windows;
+        double scale;
+        Forms.Screen display;
         string tool = "选择";
         Color color = Color.FromRgb(232, 69, 69);
         double thickness = 3;
@@ -297,6 +301,7 @@ namespace ScreenLine
         internal CaptureWindow(Forms.Screen screen, BitmapSource picture = null, List<Rect> windowSnapshot = null)
         {
             scale = WindowsNative.MonitorScale(screen);
+            display = screen;
             Title = "区域截图 · 图架";
             WindowStyle = WindowStyle.None; ResizeMode = ResizeMode.NoResize; ShowInTaskbar = false;
             Topmost = true; Background = Brushes.Black; Cursor = Cursors.Cross;
@@ -305,7 +310,7 @@ namespace ScreenLine
             Surface.Picture = picture ?? CaptureShotRules.ReadScreen(screen);
             windows = windowSnapshot ?? CaptureWindows.Snapshot(screen);
             var root = new Grid(); root.Children.Add(Surface); root.Children.Add(controls); Content = root;
-            var rows = new WrapPanel { Orientation = Orientation.Horizontal, MaxWidth = Math.Max(200, Width - 16) };
+            rows = new WrapPanel { Orientation = Orientation.Horizontal, MaxWidth = Math.Max(200, Width - 16) };
             var drawingTools = new StackPanel { Orientation = Orientation.Horizontal };
             foreach (string name in new[] { "选择", "矩形", "圆形", "箭头", "画笔", "文字", "马赛克" })
             {
@@ -316,7 +321,7 @@ namespace ScreenLine
             rows.Children.Add(drawingTools);
             var options = new StackPanel { Orientation = Orientation.Horizontal };
             options.Children.Add(Divider());
-            var swatches = new List<Border>();
+            
             string[] colorNames = { "红色", "蓝色", "绿色", "黄色", "白色", "黑色" };
             Color[] colors = { Color.FromRgb(232, 69, 69), Colors.DodgerBlue, Colors.ForestGreen, Colors.Gold, Colors.White, Colors.Black };
             for (int i = 0; i < colors.Length; i++)
@@ -329,7 +334,7 @@ namespace ScreenLine
                 swatch.Content = ring; swatch.Width = 21; swatch.MinWidth = 0; swatch.Height = 32; swatch.Padding = new Thickness(0); swatch.Focusable = false;
                 swatch.ToolTip = colorNames[i]; AutomationProperties.SetName(swatch, colorNames[i]); options.Children.Add(swatch);
             }
-            var widths = new List<Button>();
+            
             double[] sizes = { 2, 3, 5 }; string[] sizeNames = { "细线", "中线", "粗线" };
             for (int i = 0; i < sizes.Length; i++)
             {
@@ -356,24 +361,67 @@ namespace ScreenLine
             controls.Children.Add(badge); controls.Children.Add(text);
             dimensions.Text = "点击窗口或拖拽选区 · Esc 取消"; Canvas.SetLeft(badge, 20); Canvas.SetTop(badge, 20);
             Surface.MouseLeftButtonDown += Down; Surface.MouseMove += Move; Surface.MouseLeftButtonUp += Up;
-            MouseRightButtonUp += delegate { Close(); };
+            MouseRightButtonUp += delegate { Cancel(); };
             text.KeyDown += delegate(object sender, KeyEventArgs e) { if (e.Key == Key.Enter) { CommitText(); e.Handled = true; } };
             PreviewKeyDown += Keys;
             SourceInitialized += delegate
             {
                 WindowsNative.SetWindowPos(new WindowInteropHelper(this).Handle, new IntPtr(-1), screen.Bounds.Left, screen.Bounds.Top, screen.Bounds.Width, screen.Bounds.Height, 0);
             };
-            Loaded += delegate
-            {
-                // 首次显示先完成窗口合成；激活、工具栏状态和光标命中放到
-                // 输入优先级，避免这些工作拖慢全屏遮罩的首帧。
-                Dispatcher.BeginInvoke(new Action(delegate
-                {
-                    Activate(); WindowsNative.ActivateEditor(new WindowInteropHelper(this).Handle); Focus(); UpdateTools();
-                    var cursor = WindowsNative.Cursor(); HoverAt(new Point(cursor.X - screen.Bounds.Left, cursor.Y - screen.Bounds.Top));
-                }), DispatcherPriority.Input);
-            };
             Closed += delegate { Surface.Picture = null; Surface.Marks.Clear(); Surface.Pending = null; redo.Clear(); completion.TrySetResult(null); };
+        }
+
+        static TaskCompletionSource<BitmapSource> NewCompletion()
+        {
+            return new TaskCompletionSource<BitmapSource>(TaskCreationOptions.RunContinuationsAsynchronously);
+        }
+
+        internal bool Matches(Forms.Screen screen)
+        {
+            return screen != null && display != null && display.DeviceName == screen.DeviceName && display.Bounds == screen.Bounds;
+        }
+
+        // 复用同一个窗口句柄：硬件渲染下新建全屏窗口的首帧约 130ms，复用后约 20ms。
+        internal void Prepare(BitmapSource picture, List<Rect> windowSnapshot)
+        {
+            completion = NewCompletion();
+            Surface.Picture = picture;
+            windows = windowSnapshot ?? CaptureWindows.Snapshot(display);
+            tool = "选择"; color = Color.FromRgb(232, 69, 69); thickness = 3;
+            start = textOrigin = new Point(); original = Rect.Empty; hovered = Rect.Empty; edges = 0;
+            selecting = moving = drawing = finished = false;
+            Surface.Selection = Rect.Empty; Surface.Hover = Rect.Empty;
+            Surface.Marks.Clear(); Surface.Pending = null; redo.Clear();
+            text.Clear(); text.Visibility = Visibility.Collapsed;
+            toolbar.Visibility = Visibility.Collapsed;
+            dimensions.Text = "点击窗口或拖拽选区 · Esc 取消";
+            Canvas.SetLeft(badge, 20); Canvas.SetTop(badge, 20);
+            for (int i = 0; i < swatches.Count; i++) swatches[i].BorderThickness = new Thickness(i == 0 ? 1.5 : 0);
+            for (int i = 0; i < widths.Count; i++) widths[i].Tag = i == 1 ? "primary" : "quiet";
+            Surface.SetCursorVisible(true); Surface.Refresh(); UpdateTools();
+        }
+
+        internal void Warm()
+        {
+            Opacity = 0; ShowActivated = false;
+            if (!IsVisible) Show();
+            if (IsVisible) Hide();
+            Opacity = 1;
+            ShowActivated = true;
+        }
+
+        internal void Dismiss()
+        {
+            if (IsVisible) Hide();
+            Surface.Picture = null; Surface.Marks.Clear(); Surface.Pending = null; redo.Clear();
+            text.Clear(); text.Visibility = Visibility.Collapsed;
+            finished = false;
+        }
+
+        internal void Cancel()
+        {
+            completion.TrySetResult(null);
+            Dismiss();
         }
 
         Button AddButton(string name, Action action)
@@ -398,7 +446,16 @@ namespace ScreenLine
 
         static Border Divider() { return new Border { Width = 1, Height = 20, Background = LightTheme.Brush("#E4E9EF"), Margin = new Thickness(6, 0, 6, 0), VerticalAlignment = VerticalAlignment.Center }; }
 
-        internal Task<BitmapSource> PickAsync() { Show(); return completion.Task; }
+        internal Task<BitmapSource> PickAsync()
+        {
+            if (!IsVisible) Show();
+            Dispatcher.BeginInvoke(new Action(delegate
+            {
+                Activate(); WindowsNative.ActivateEditor(new WindowInteropHelper(this).Handle); Focus(); UpdateTools();
+                var cursor = WindowsNative.Cursor(); HoverAt(new Point(cursor.X - display.Bounds.Left, cursor.Y - display.Bounds.Top));
+            }), DispatcherPriority.Input);
+            return completion.Task;
+        }
 
         internal static BitmapSource ReadScreen(Forms.Screen display) { return CaptureShotRules.ReadScreen(display); }
 
@@ -534,12 +591,12 @@ namespace ScreenLine
         void Finish()
         {
             if (finished || Selection.IsEmpty) return;
-            CommitText(); var result = Surface.Export(); finished = true; completion.TrySetResult(result); Close();
+            CommitText(); var result = Surface.Export(); finished = true; completion.TrySetResult(result); Dismiss();
         }
 
         void Keys(object sender, KeyEventArgs e)
         {
-            if (e.Key == Key.Escape) { e.Handled = true; Close(); }
+            if (e.Key == Key.Escape) { e.Handled = true; Cancel(); }
             else if (!text.IsKeyboardFocused && e.Key == Key.Enter) { e.Handled = true; Finish(); }
             else if (!text.IsKeyboardFocused && Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.Z) { e.Handled = true; Undo(); }
             else if (!text.IsKeyboardFocused && Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.Y) { e.Handled = true; Redo(); }

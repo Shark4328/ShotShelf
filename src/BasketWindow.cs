@@ -76,7 +76,7 @@ namespace ScreenLine
         readonly HashSet<Image> loadingPictures = new HashSet<Image>();
         static readonly SemaphoreSlim thumbnailSlots = new SemaphoreSlim(2, 2);
         static readonly SemaphoreSlim previewSlot = new SemaphoreSlim(1, 1);
-        internal readonly Button PendingTab, AllTab, HangButton, DeleteButton, SelectAllButton, ExportButton, OpenExportButton, ShowFailuresButton;
+        internal readonly Button PendingTab, AllTab, HangButton, DeleteButton, SelectAllButton, CopyButton, ExportButton, OpenExportButton, ShowFailuresButton;
         internal readonly CheckBox AutoHang;
         readonly TextBlock exportStatus;
         internal readonly ExportMenu ExportMenu;
@@ -86,7 +86,7 @@ namespace ScreenLine
         ExportScope lastExportScope;
         ExportFormat lastExportFormat;
         ExportFailuresWindow exportFailuresWindow;
-        bool exporting;
+        bool exporting, copying;
         bool pendingOnly = true, refreshing, mounting, closed;
         CaptureItem previewItem;
         ImageContent previewContent;
@@ -189,6 +189,7 @@ namespace ScreenLine
             footer.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             footer.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             footer.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            footer.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             SelectAllButton = LightTheme.Button("全选", SelectAll);
             SelectAllButton.Background = LightTheme.Brush("#E4EEFC");
             SelectAllButton.BorderBrush = LightTheme.Brush("#8DB0DF");
@@ -215,26 +216,33 @@ namespace ScreenLine
             exportLine.Children.Add(ShowFailuresButton);
             information.Children.Add(exportLine);
             Grid.SetColumn(information, 1); footer.Children.Add(information);
+            CopyButton = LightTheme.Button("复制所选", CopySelected);
+            CopyButton.Width = 112; CopyButton.Height = 38; CopyButton.MinWidth = 0;
+            CopyButton.HorizontalAlignment = HorizontalAlignment.Right; CopyButton.VerticalAlignment = VerticalAlignment.Center;
+            CopyButton.Margin = new Thickness(0, 0, 12, 0);
+            AutomationProperties.SetName(CopyButton, "复制所选图片");
+            CopyButton.ToolTip = "复制所选图片，可一次粘贴多张到微信、QQ";
+            Grid.SetColumn(CopyButton, 2); footer.Children.Add(CopyButton);
             ExportButton = LightTheme.Button("导出", ShowExportMenu);
             ExportButton.Width = 96; ExportButton.Height = 38; ExportButton.MinWidth = 0;
             ExportButton.HorizontalAlignment = HorizontalAlignment.Right; ExportButton.VerticalAlignment = VerticalAlignment.Center;
             ExportButton.Margin = new Thickness(0, 0, 12, 0);
-            AutomationProperties.SetName(ExportButton, "导出图片"); Grid.SetColumn(ExportButton, 2); footer.Children.Add(ExportButton);
+            AutomationProperties.SetName(ExportButton, "导出图片"); Grid.SetColumn(ExportButton, 3); footer.Children.Add(ExportButton);
             DeleteButton = LightTheme.Button("删除所选", DeleteSelected);
             DeleteButton.Width = 112; DeleteButton.Height = 38;
             DeleteButton.HorizontalAlignment = HorizontalAlignment.Right; DeleteButton.VerticalAlignment = VerticalAlignment.Center;
             DeleteButton.Margin = new Thickness(0, 0, 12, 0); DeleteButton.Foreground = LightTheme.Brush("#B74E4A");
             DeleteButton.Background = LightTheme.Brush("#FFF8F7"); DeleteButton.BorderBrush = LightTheme.Brush("#ECD6D2");
             DeleteButton.ToolTip = "收集副本移到回收站，外部原图只移除记录";
-            AutomationProperties.SetName(DeleteButton, "删除所选图片"); Grid.SetColumn(DeleteButton, 3); footer.Children.Add(DeleteButton);
+            AutomationProperties.SetName(DeleteButton, "删除所选图片"); Grid.SetColumn(DeleteButton, 4); footer.Children.Add(DeleteButton);
             HangButton = LightTheme.Button("挂上绳子", Mount, "primary"); HangButton.Width = 144; HangButton.Height = 38;
             HangButton.HorizontalAlignment = HorizontalAlignment.Right; HangButton.VerticalAlignment = VerticalAlignment.Center;
-            AutomationProperties.SetName(HangButton, "挂上绳子"); Grid.SetColumn(HangButton, 4); footer.Children.Add(HangButton);
-            foreach (var button in new[] { PendingTab, AllTab, SelectAllButton, ExportButton, DeleteButton, HangButton })
+            AutomationProperties.SetName(HangButton, "挂上绳子"); Grid.SetColumn(HangButton, 5); footer.Children.Add(HangButton);
+            foreach (var button in new[] { PendingTab, AllTab, SelectAllButton, CopyButton, ExportButton, DeleteButton, HangButton })
             {
                 button.FontWeight = FontWeights.Normal;
             }
-            foreach (var button in new[] { SelectAllButton, ExportButton, DeleteButton, HangButton }) button.FontSize = 14;
+            foreach (var button in new[] { SelectAllButton, CopyButton, ExportButton, DeleteButton, HangButton }) button.FontSize = 14;
             ExportMenu = new ExportMenu(BeginExport, OpenLastExport, delegate { return lastExportOutput; });
             ExportMenu.PlacementTarget = ExportButton; ExportMenu.Placement = PlacementMode.Top;
             ExportMenu.HorizontalOffset = 8; ExportMenu.VerticalOffset = 4;
@@ -603,6 +611,47 @@ namespace ScreenLine
             catch (Exception error) { exportStatus.Text = "无法打开导出目录：" + error.Message; }
         }
 
+        async void CopySelected()
+        {
+            if (copying) return;
+            var paths = new List<string>();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            // 与篮子列表一致：按修改时间从新到旧复制，粘贴后的顺序与界面相同。
+            foreach (var item in gallery.Collected.Where(i => selected.Contains(i.Path)).OrderByDescending(i => i.Written))
+            {
+                if (seen.Add(item.Path)) paths.Add(item.Path);
+            }
+            var valid = new List<string>();
+            int skipped = 0;
+            foreach (string path in paths)
+            {
+                if (File.Exists(path)) valid.Add(path); else skipped++;
+            }
+            if (valid.Count == 0)
+            {
+                status.Text = "所选文件已不存在";
+                return;
+            }
+            copying = true; UpdateSelection(false);
+            status.Text = "正在复制 " + valid.Count + " 张…";
+            try
+            {
+                await WindowsClipboard.Write(ShotClipboard.Build(valid, valid.Count == 1));
+                if (closed) return;
+                status.Text = "已复制 " + valid.Count + " 张，可粘贴发送" + (skipped > 0 ? " · 跳过 " + skipped + " 张已不存在" : "");
+            }
+            catch (Exception error)
+            {
+                gallery.Store.Log(error);
+                status.Text = "复制失败：" + error.Message;
+            }
+            finally
+            {
+                copying = false;
+                if (!closed) UpdateSelection(false);
+            }
+        }
+
         void UpdateSelection(bool updateStatus = true)
         {
             SelectAllButton.IsEnabled = choices.Count > 0;
@@ -611,6 +660,7 @@ namespace ScreenLine
             if (updateStatus) status.Text = "已选 " + selected.Count + " 张" + (pending < selected.Count ? " · " + pending + " 张待挂" : "");
             HangButton.IsEnabled = pending > 0;
             DeleteButton.IsEnabled = selected.Count > 0;
+            CopyButton.IsEnabled = selected.Count > 0 && !copying;
             ExportMenu.SetCounts(gallery.Collected.Count(item => selected.Contains(item.Path)), gallery.Collected.Count);
         }
 

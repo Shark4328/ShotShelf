@@ -165,6 +165,7 @@ namespace ScreenLine
             var basketBody = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center };
             basketImage.Source = PictureBasket.Source(Appearance);
             RenderOptions.SetBitmapScalingMode(basketImage, BitmapScalingMode.HighQuality);
+            basketImage.CacheMode = new BitmapCache();
             basketImage.RenderTransform = basketTurn;
             Point hook = PictureBasket.Hook(Appearance); basketTurn.CenterX = hook.X; basketTurn.CenterY = hook.Y;
             basketImage.Height = 112 * basketImage.Source.Height / basketImage.Source.Width;
@@ -229,6 +230,7 @@ namespace ScreenLine
             hint.BorderBrush = new SolidColorBrush(Color.FromRgb(218, 224, 232));
             hint.BorderThickness = new Thickness(1);
             hint.Effect = new DropShadowEffect { BlurRadius = 16, ShadowDepth = 3, Opacity = 0.18 };
+            hint.CacheMode = new BitmapCache();
             content.Children.Add(hint);
 
             SourceInitialized += delegate
@@ -955,6 +957,9 @@ namespace ScreenLine
             Surface.BorderThickness = new Thickness(1);
             Surface.CornerRadius = new CornerRadius(12);
             Surface.Effect = new DropShadowEffect { BlurRadius = 14, ShadowDepth = 4, Opacity = 0.2 };
+            // Cache the card face together with its shadow: the card is rotated by the
+            // swing animation and scaled on hover, and the raster stays reusable.
+            Surface.CacheMode = new BitmapCache();
             var imageLayer = new Grid();
             photo.Stretch = Stretch.Uniform;
             photo.Margin = new Thickness(6);
