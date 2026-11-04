@@ -71,8 +71,9 @@ namespace ScreenLine.Tests
                 string missing = Path.Combine(source, "已被清理.png");
                 var folder = ExportService.Run(new ExportRequest { Scope = ExportScope.All, Format = ExportFormat.Folder, Destination = target, Files = new[] { valid, missing } }, null);
                 Check(folder.Error == null && folder.Succeeded == 1 && folder.Total == 2 && folder.Failures.Count == 1 && folder.Failures[0] == "已被清理.png");
+                Check(folder.FailurePaths.Count == 1 && folder.FailurePaths[0] == missing, "文件夹导出记录失败文件的原路径");
                 var zip = ExportService.Run(new ExportRequest { Scope = ExportScope.All, Format = ExportFormat.Zip, Destination = target, Files = new[] { valid, missing } }, null);
-                Check(zip.Error == null && zip.Succeeded == 1 && zip.Failures.Count == 1);
+                Check(zip.Error == null && zip.Succeeded == 1 && zip.Failures.Count == 1 && zip.FailurePaths.Count == 1 && zip.FailurePaths[0] == missing, "ZIP 导出记录失败文件的原路径");
                 Check(Directory.GetFiles(target, "*.tmp").Length == 0);
             });
             Run("导出：没有图片或全部丢失时给出明确错误并清理残留", delegate
@@ -98,6 +99,7 @@ namespace ScreenLine.Tests
                 {
                     var zip = ExportService.Run(new ExportRequest { Scope = ExportScope.All, Format = ExportFormat.Zip, Destination = target, Files = new[] { valid, locked } }, null);
                     Check(zip.Error == null && zip.Succeeded == 1 && zip.Failures.Count == 1 && zip.Failures[0] == "锁定.png");
+                    Check(zip.FailurePaths.Count == 1 && zip.FailurePaths[0] == locked, "锁定文件失败项保留原路径供重试");
                     using (var archive = ZipFile.OpenRead(zip.Output))
                     {
                         Check(archive.Entries.Count == 1 && archive.Entries[0].FullName == "正常.png");
@@ -111,6 +113,21 @@ namespace ScreenLine.Tests
                 }
                 Check(Directory.GetFiles(target, "*.tmp").Length == 0);
                 Check(Directory.GetFiles(Path.GetTempPath(), "ShotShelf-export-*.tmp").Length == stagedBefore);
+            });
+            Run("导出：只清理超过一天的 ZIP 临时文件", delegate
+            {
+                string source = Path.Combine(root, "export-temp-source"), target = Path.Combine(root, "export-temp-out");
+                Directory.CreateDirectory(source); Directory.CreateDirectory(target);
+                string stale = Path.Combine(target, "ShotShelf-导出-20260101-000000.zip.tmp");
+                string recent = Path.Combine(target, "ShotShelf-导出-20260102-000000.zip.tmp");
+                File.WriteAllText(stale, "旧临时文件"); File.WriteAllText(recent, "新临时文件");
+                File.SetLastWriteTimeUtc(stale, DateTime.UtcNow.AddHours(-25));
+                File.SetLastWriteTimeUtc(recent, DateTime.UtcNow.AddHours(-1));
+                string valid = WriteExport(source, "临时清理.png", 12);
+                var result = ExportService.Run(new ExportRequest { Scope = ExportScope.All, Format = ExportFormat.Folder, Destination = target, Files = new[] { valid } }, null);
+                Check(result.Error == null && result.Succeeded == 1);
+                Check(!File.Exists(stale), "超过 24 小时的导出临时文件被删除");
+                Check(File.Exists(recent), "未过期的导出临时文件保留");
             });
             Run("自动清理：超过保留天数的最旧截图先删除，三天边界一致", delegate
             {
@@ -221,6 +238,10 @@ namespace ScreenLine.Tests
                 Check(text.Contains("已删除 2 张") && text.Contains("释放 3 MB") && text.Contains("当前占用 7 MB") && text.Contains("仍高于 5 MB 阈值"));
                 string failedText = CleanupRules.Describe(new CleanupResult { Failed = true, RemainingBytes = 2 * 1024 * 1024 }, 5);
                 Check(failedText.Contains("清理检查未完成") && failedText.Contains("当前占用 2 MB"));
+                string busyText = CleanupRules.Describe(new CleanupResult { Busy = true }, 5);
+                string closedText = CleanupRules.Describe(new CleanupResult { Closed = true }, 5);
+                Check(busyText.Contains("已有清理任务正在运行") && closedText.Contains("程序正在退出") && busyText != closedText,
+                    "清理忙碌与程序退出使用不同提示");
             });
             Run("启动失败会写入 error.log 并给出可理解的提示", delegate
             {
@@ -574,6 +595,7 @@ namespace ScreenLine.Tests
         }
 
         static void Check(bool condition) { if (!condition) throw new Exception("断言未通过"); }
+        static void Check(bool condition, string message) { if (!condition) throw new Exception(message); }
 
         static void Run(string name, Action test)
         {

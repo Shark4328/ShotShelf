@@ -39,6 +39,14 @@ namespace ScreenLine
         [DllImport("user32.dll")] static extern int SetWindowLong(IntPtr window, int index, int value);
         [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern bool SetProp(IntPtr window, string name, IntPtr value);
         [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr window, IntPtr after, int x, int y, int width, int height, uint flags);
+
+        [DllImport("dwmapi.dll")] static extern int DwmFlush();
+        public static void FlushComposition()
+        {
+            try { DwmFlush(); }
+            catch (DllNotFoundException) { }
+            catch (EntryPointNotFoundException) { }
+        }
         [DllImport("user32.dll")] static extern IntPtr MonitorFromPoint(Point point, uint flags);
         [DllImport("shcore.dll")] static extern int GetDpiForMonitor(IntPtr monitor, int type, out uint x, out uint y);
         [DllImport("shell32.dll")] static extern int SHGetKnownFolderPath([MarshalAs(UnmanagedType.LPStruct)] Guid folder, uint flags, IntPtr token, out IntPtr path);

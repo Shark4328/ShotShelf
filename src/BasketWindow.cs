@@ -76,11 +76,16 @@ namespace ScreenLine
         readonly HashSet<Image> loadingPictures = new HashSet<Image>();
         static readonly SemaphoreSlim thumbnailSlots = new SemaphoreSlim(2, 2);
         static readonly SemaphoreSlim previewSlot = new SemaphoreSlim(1, 1);
-        internal readonly Button PendingTab, AllTab, HangButton, DeleteButton, SelectAllButton, ExportButton, OpenExportButton;
+        internal readonly Button PendingTab, AllTab, HangButton, DeleteButton, SelectAllButton, ExportButton, OpenExportButton, ShowFailuresButton;
         internal readonly CheckBox AutoHang;
         readonly TextBlock exportStatus;
         internal readonly ExportMenu ExportMenu;
         string lastExportOutput;
+        ExportResult lastExportResult;
+        string lastExportDestination;
+        ExportScope lastExportScope;
+        ExportFormat lastExportFormat;
+        ExportFailuresWindow exportFailuresWindow;
         bool exporting;
         bool pendingOnly = true, refreshing, mounting, closed;
         CaptureItem previewItem;
@@ -202,6 +207,12 @@ namespace ScreenLine
             OpenExportButton.Visibility = Visibility.Collapsed;
             AutomationProperties.SetName(OpenExportButton, "打开导出目录");
             exportLine.Children.Add(OpenExportButton);
+            ShowFailuresButton = LightTheme.Button("查看失败详情", ShowExportFailures, "quiet");
+            ShowFailuresButton.FontSize = 11; ShowFailuresButton.Height = 20; ShowFailuresButton.MinWidth = 0;
+            ShowFailuresButton.Padding = new Thickness(8, 0, 0, 0);
+            ShowFailuresButton.Visibility = Visibility.Collapsed;
+            AutomationProperties.SetName(ShowFailuresButton, "查看导出失败详情");
+            exportLine.Children.Add(ShowFailuresButton);
             information.Children.Add(exportLine);
             Grid.SetColumn(information, 1); footer.Children.Add(information);
             ExportButton = LightTheme.Button("导出", ShowExportMenu);
@@ -238,7 +249,7 @@ namespace ScreenLine
             };
             PreviewKeyDown += delegate(object sender, KeyEventArgs e) { if (e.Key == Key.Escape) Close(); };
             gallery.Changed += GalleryChanged;
-            Closed += delegate { closed = true; gallery.Changed -= GalleryChanged; previewVersion++; preview.Source = null; foreach (var image in pictures.Values) image.Source = null; pictures.Clear(); visiblePictures.Clear(); };
+            Closed += delegate { closed = true; CloseExportFailures(); gallery.Changed -= GalleryChanged; previewVersion++; preview.Source = null; foreach (var image in pictures.Values) image.Source = null; pictures.Clear(); visiblePictures.Clear(); };
             Refresh();
         }
 
@@ -460,8 +471,14 @@ namespace ScreenLine
             using (var picker = new Forms.FolderBrowserDialog { Description = "选择导出位置", ShowNewFolderButton = true })
             {
                 if (picker.ShowDialog(new WindowHandleOwner(new WindowInteropHelper(this).Handle)) != Forms.DialogResult.OK) return;
+                CloseExportFailures();
+                lastExportResult = null;
+                lastExportDestination = picker.SelectedPath;
+                lastExportScope = scope;
+                lastExportFormat = format;
                 exporting = true; ExportButton.IsEnabled = false;
                 exportStatus.Visibility = Visibility.Visible; OpenExportButton.Visibility = Visibility.Collapsed;
+                ShowFailuresButton.Visibility = Visibility.Collapsed;
                 exportStatus.ToolTip = null; exportStatus.Text = "正在导出 0/" + items.Length + "…";
                 status.Text = "正在导出 " + items.Length + " 张图片";
                 try
@@ -478,6 +495,7 @@ namespace ScreenLine
                     var result = await Task.Run(() => ExportService.Run(request, report));
                     if (closed) return;
                     lastExportOutput = result.Output;
+                    lastExportResult = result;
                     ExportMenu.Refresh();
                     if (result.Error != null)
                     {
@@ -493,15 +511,80 @@ namespace ScreenLine
                             : summary + "\n" + string.Join("\n", result.Failures.ToArray());
                         OpenExportButton.Visibility = Visibility.Visible;
                     }
+                    ShowFailuresButton.Visibility = result.Failures.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
                 }
                 catch (Exception error)
                 {
                     exportStatus.Text = "导出未完成：" + error.Message; exportStatus.ToolTip = exportStatus.Text;
-                    OpenExportButton.Visibility = Visibility.Collapsed;
+                    OpenExportButton.Visibility = Visibility.Collapsed; ShowFailuresButton.Visibility = Visibility.Collapsed;
                 }
                 finally { exporting = false; if (!closed) ExportButton.IsEnabled = true; }
-                UpdateSelection();
+                // 导出结果保留在底部状态栏，不能被选中数量覆盖。
+                UpdateSelection(false);
             }
+        }
+
+        void CloseExportFailures()
+        {
+            var window = exportFailuresWindow;
+            exportFailuresWindow = null;
+            if (window == null) return;
+            try { window.Close(); }
+            catch (InvalidOperationException) { }
+        }
+
+        void ShowExportFailures()
+        {
+            if (lastExportResult == null || lastExportResult.Failures.Count == 0) return;
+            if (exportFailuresWindow != null)
+            {
+                if (!exportFailuresWindow.IsVisible) exportFailuresWindow.Show();
+                exportFailuresWindow.Activate();
+                return;
+            }
+            var window = new ExportFailuresWindow(lastExportResult, RetryExport, ExportRetried);
+            window.Owner = this;
+            window.Closed += delegate { if (ReferenceEquals(exportFailuresWindow, window)) exportFailuresWindow = null; };
+            exportFailuresWindow = window;
+            window.Show();
+        }
+
+        Task<ExportResult> RetryExport(string[] candidates)
+        {
+            string destination = lastExportDestination;
+            var files = (candidates ?? new string[0])
+                .Where(path => !string.IsNullOrEmpty(path) && File.Exists(path))
+                .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+            if (files.Length == 0 || string.IsNullOrEmpty(destination))
+                return Task.FromResult(new ExportResult { Error = "失败文件已不在原位置，无法重试。" });
+            var request = new ExportRequest
+            {
+                Scope = lastExportScope, Format = lastExportFormat,
+                Destination = destination, Files = files
+            };
+            return Task.Run(() => ExportService.Run(request, null));
+        }
+
+        void ExportRetried(ExportResult result)
+        {
+            if (closed || result == null) return;
+            lastExportResult = result;
+            if (!string.IsNullOrEmpty(result.Output)) lastExportOutput = result.Output;
+            ExportMenu.Refresh();
+            exportStatus.Visibility = Visibility.Visible;
+            OpenExportButton.Visibility = result.Output != null && result.Error == null ? Visibility.Visible : Visibility.Collapsed;
+            ShowFailuresButton.Visibility = result.Failures.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+            if (result.Error != null)
+            {
+                exportStatus.Text = result.Error;
+                exportStatus.ToolTip = exportStatus.Text;
+                return;
+            }
+            string summary = "重试完成，成功导出 " + result.Succeeded + " 张";
+            if (result.Failures.Count > 0) summary += " · " + result.Failures.Count + " 张仍失败";
+            exportStatus.Text = summary;
+            exportStatus.ToolTip = result.Failures.Count == 0 ? result.Output
+                : summary + "\n" + string.Join("\n", result.Failures.ToArray());
         }
 
         void OpenLastExport()
@@ -520,12 +603,12 @@ namespace ScreenLine
             catch (Exception error) { exportStatus.Text = "无法打开导出目录：" + error.Message; }
         }
 
-        void UpdateSelection()
+        void UpdateSelection(bool updateStatus = true)
         {
             SelectAllButton.IsEnabled = choices.Count > 0;
             SelectAllButton.Content = choices.Count > 0 && choices.Keys.All(selected.Contains) ? "取消全选" : "全选";
             int pending = selected.Count(path => !gallery.Contains(path));
-            status.Text = "已选 " + selected.Count + " 张" + (pending < selected.Count ? " · " + pending + " 张待挂" : "");
+            if (updateStatus) status.Text = "已选 " + selected.Count + " 张" + (pending < selected.Count ? " · " + pending + " 张待挂" : "");
             HangButton.IsEnabled = pending > 0;
             DeleteButton.IsEnabled = selected.Count > 0;
             ExportMenu.SetCounts(gallery.Collected.Count(item => selected.Contains(item.Path)), gallery.Collected.Count);

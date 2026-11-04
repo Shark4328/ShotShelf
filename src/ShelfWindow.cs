@@ -671,13 +671,31 @@ namespace ScreenLine
             if (hiding) hideSeconds = 0.12;
         }
 
-        internal async Task WaitHidden()
+        internal async Task<bool> WaitHidden()
         {
-            if (!hiding) return;
+            if (!hiding) return true;
             var waiter = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             hideWaiters.Add(waiter);
-            try { await Task.WhenAny(waiter.Task, Task.Delay(600)); }
+            try
+            {
+                Task completed;
+                // 慢机器上动画可能迟迟不结束；超时返回 false，由调用方强制隐藏后再抓屏。
+                completed = await Task.WhenAny(waiter.Task, Task.Delay(600));
+                return completed == waiter.Task;
+            }
             finally { hideWaiters.Remove(waiter); }
+        }
+
+        internal void HideImmediately()
+        {
+            if (!IsVisible) return;
+            Visibility = Visibility.Hidden;
+            WindowsNative.FlushComposition();
+        }
+
+        internal void RestoreVisibility()
+        {
+            if (Visibility != Visibility.Visible) Visibility = Visibility.Visible;
         }
 
         void CompleteHidden()

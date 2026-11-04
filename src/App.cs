@@ -19,9 +19,9 @@ using Forms = System.Windows.Forms;
 [assembly: AssemblyTitle("ShotShelf · 图架")]
 [assembly: AssemblyProduct("ShotShelf")]
 [assembly: AssemblyDescription("图架：把截图挂在屏幕上沿，随手复制、拖拽和保存。")]
-[assembly: AssemblyVersion("1.0.1.0")]
-[assembly: AssemblyFileVersion("1.0.1.0")]
-[assembly: AssemblyInformationalVersion("1.0.1")]
+[assembly: AssemblyVersion("1.0.2.0")]
+[assembly: AssemblyFileVersion("1.0.2.0")]
+[assembly: AssemblyInformationalVersion("1.0.2")]
 
 namespace ScreenLine
 {
@@ -56,6 +56,7 @@ namespace ScreenLine
         UpdateRelease availableUpdate;
         UpdateWindow updateWindow;
         bool checkingUpdates, disposed;
+        internal Func<Forms.Screen, Task<CaptureShot>> CaptureSource = CaptureShotRules.CaptureAsync;
         uint textClipboardSequence;
         int textClipboardVersion;
         const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
@@ -79,7 +80,9 @@ namespace ScreenLine
             textClipboardSequence = WindowsNative.GetClipboardSequenceNumber();
             events.ClipboardChanged += CollectClipboardText;
             Captures.Arrived += Shelf.ShowNewCapture;
-            Captures.Arrived += async delegate { await RunCleanup(); };
+            // 落盘反馈和自动挂图解耦：关闭自动上绳时也要有提示，并且照常触发清理。
+            Captures.Stored += delegate(CaptureItem item) { if (!Captures.AutoHang) Notice("已存入图片篮子"); };
+            Captures.Stored += async delegate { await RunCleanup(); };
             Captures.Failed += Notice;
             using (var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("ShotShelf.Icon"))
                 tray.Icon = new System.Drawing.Icon(stream, Forms.SystemInformation.SmallIconSize);
@@ -217,18 +220,33 @@ namespace ScreenLine
                 TrayMenu.Close(); if (Basket != null) Basket.Close(); if (TextWindow != null) TextWindow.Close();
                 if (Appearance != null) Appearance.Close(); if (ShortcutSettings != null) ShortcutSettings.Close();
                 // 收起货架后在后台完成抓屏，遮罩就绪前不再固定等待。
-                Shelf.HideForCapture(); await Shelf.WaitHidden();
+                Shelf.HideForCapture();
+                if (!await Shelf.WaitHidden()) Shelf.HideImmediately();
                 if (disposed) return;
-                var shot = await CaptureShotRules.CaptureAsync(display);
+                var shot = await CaptureSource(display);
                 if (disposed) return;
                 Capture = new CaptureWindow(display, shot.Picture, shot.Windows);
                 var result = await Capture.PickAsync(); Capture = null;
                 if (disposed) return;
                 if (result != null) await Captures.AcceptCapture(result);
-                else if (revealed) Shelf.Reveal(true, false, 2);
             }
-            catch (Exception error) { if (!disposed) { Gallery.Store.Log(error); Notice("截图未完成，请重试。"); } }
-            finally { if (Capture != null) Capture.Close(); Capture = null; Shelf.Capturing = false; }
+            catch (Exception error)
+            {
+                if (!disposed)
+                {
+                    Gallery.Store.Log(error);
+                    Notice("截图未完成，请重试。");
+                }
+            }
+            finally
+            {
+                if (Capture != null) Capture.Close();
+                Capture = null;
+                Shelf.RestoreVisibility();
+                // 截图窗口关闭后恢复截图前的展开状态；初始隐藏则保持隐藏。
+                if (!disposed && revealed) Shelf.Reveal(true, false, 2);
+                Shelf.Capturing = false;
+            }
         }
 
         async Task CheckForUpdates(bool manual)
@@ -295,10 +313,16 @@ namespace ScreenLine
 
         internal async Task<CleanupResult> RunCleanup()
         {
-            if (disposed || cleaning) return null;
+            if (disposed) return new CleanupResult { Closed = true };
+            if (cleaning) return new CleanupResult { Busy = true };
             var state = Gallery.Store.State;
-            if (!state.AutoCleanEnabled) return new CleanupResult { Skipped = true, RemainingBytes = CleanupUsage() };
+            if (!state.AutoCleanEnabled)
+            {
+                long remaining = await Task.Run(() => CleanupUsage());
+                return new CleanupResult { Skipped = true, RemainingBytes = remaining, Closed = disposed };
+            }
             cleaning = true;
+            CleanupResult failedResult = null;
             try
             {
                 var protectedFiles = new List<string>();
@@ -315,7 +339,7 @@ namespace ScreenLine
                 };
                 string inbox = Gallery.Store.Inbox;
                 CleanupResult result = await Task.Run(() => CaptureCleanup.Run(inbox, options));
-                if (disposed) return null;
+                if (disposed) return new CleanupResult { Closed = true, RemainingBytes = result.RemainingBytes };
                 state.LastCleanupUtc = DateTime.UtcNow;
                 if (result.Deleted > 0) { Gallery.Prune(); Shelf.Update(); }
                 bool notify = !result.ReachedThreshold
@@ -330,9 +354,13 @@ namespace ScreenLine
             catch (Exception error)
             {
                 if (!disposed) Gallery.Store.Log(error);
-                return new CleanupResult { Failed = true, RemainingBytes = CleanupUsage() };
+                // 旧版 C# 编译器不允许在 catch 中 await；退出异常处理后再统计占用。
+                failedResult = new CleanupResult { Failed = true, Closed = disposed };
             }
             finally { cleaning = false; }
+            try { failedResult.RemainingBytes = await Task.Run(() => CleanupUsage()); }
+            catch (Exception scanError) { if (!disposed) Gallery.Store.Log(scanError); }
+            return failedResult;
         }
 
         void SyncScreens()

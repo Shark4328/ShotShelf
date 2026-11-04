@@ -52,7 +52,7 @@ namespace ScreenLine.Tests
                     }
                     clipboard = snapshot;
                 }
-                try { await Run(); Console.WriteLine("1.0.1 专项验证：{0} 项通过", checks); }
+                try { await Run(); Console.WriteLine("1.0.2 专项验证：{0} 项通过", checks); }
                 catch (Exception error) { Console.WriteLine("专项验证失败：" + error); Environment.ExitCode = 1; }
                 finally
                 {
@@ -220,7 +220,35 @@ namespace ScreenLine.Tests
             await Until(delegate { return cleanupWindow.StatusText.Text.Contains("已删除 2 张"); });
             Check(cleanupWindow.StatusText.Text.Contains("释放 3 MB") && cleanupWindow.StatusText.Text.Contains("当前占用 7 MB")
                 && cleanupWindow.StatusText.Text.Contains("仍高于 1 MB"), "存储窗口显示删除数量、释放空间与剩余占用");
+            Check(cleanupWindow.Content is ScrollViewer, "存储窗口主体放入可滚动容器");
             cleanupWindow.Close();
+            var slowWindow = new CleanupWindow(store, delegate { System.Threading.Thread.Sleep(500); return 0; },
+                delegate { return Task.FromResult(new CleanupResult { ReachedThreshold = true }); });
+            var started = DateTime.UtcNow;
+            slowWindow.Show(); slowWindow.UpdateLayout();
+            long elapsed = (long)(DateTime.UtcNow - started).TotalMilliseconds;
+            Check(elapsed < 250, "存储窗口先显示界面，占用统计不阻塞 UI，实际 " + elapsed + "ms");
+            Check(slowWindow.UsageText.Text.Contains("正在计算"), "占用统计完成前显示计算提示");
+            await Until(delegate { return slowWindow.UsageText.Text.Contains("当前截图占用 0 B"); });
+            slowWindow.Close();
+            string failedSource = Path.Combine(root, "导出失败源.png");
+            File.WriteAllBytes(failedSource, ImageContent.EncodeClipboard(Pattern(30, 20)));
+            var failedResult = new ExportResult { Total = 1 };
+            failedResult.Failures.Add("导出失败源.png"); failedResult.FailureReasons.Add("文件被占用"); failedResult.FailurePaths.Add(failedSource);
+            bool retriedOriginal = false, retryCompleted = false;
+            var failureWindow = new ExportFailuresWindow(failedResult,
+                delegate(string[] paths)
+                {
+                    retriedOriginal = paths.Length == 1 && paths[0] == failedSource;
+                    return Task.FromResult(new ExportResult { Total = 1, Succeeded = 1, Output = Path.Combine(root, "重试导出") });
+                },
+                delegate(ExportResult result) { retryCompleted = result.Succeeded == 1; });
+            failureWindow.Show(); failureWindow.UpdateLayout();
+            Check(failureWindow.FailureCount == 1 && failureWindow.RetryButton.IsEnabled, "导出失败窗口列出失败文件并允许重试");
+            Click(failureWindow.RetryButton);
+            await Until(delegate { return retryCompleted && failureWindow.FailureCount == 0; });
+            Check(retriedOriginal && failureWindow.RetryButton.Visibility == Visibility.Collapsed, "重试沿用失败文件原路径并在成功后收起重试入口");
+            failureWindow.Close();
             store.State.AutoCleanEnabled = autoCleanEnabled; store.State.AutoCleanDays = autoCleanDays; store.State.AutoCleanThresholdMb = autoCleanThreshold;
             controller.Gallery.Forget(oldBasketItemOne); controller.Gallery.Forget(oldBasketItemTwo);
             File.Delete(oldBasketOne); File.Delete(oldBasketTwo);
@@ -268,6 +296,9 @@ namespace ScreenLine.Tests
             int collected = controller.Gallery.Collected.Count;
             await controller.Captures.AcceptCapture(content); writtenSequence = WindowsNative.GetClipboardSequenceNumber(); await Task.Delay(400);
             Check(controller.Gallery.Collected.Count == collected + 1 && controller.Gallery.Items.Count == 1, "主动截图遵守自动挂图开关，剪贴板开启时不重复收集");
+            Check(Application.Current.Windows.OfType<LightNotice>().Any(window => window.Message == "已存入图片篮子"),
+                "关闭自动挂图时截图落盘提示已存入图片篮子");
+            foreach (var notice in Application.Current.Windows.OfType<LightNotice>().ToArray()) notice.Close();
             controller.TrayMenu.Pictures.IsChecked = false;
             controller.Captures.AutoHang = true;
             await controller.Captures.AcceptCapture(content); writtenSequence = WindowsNative.GetClipboardSequenceNumber();
@@ -303,8 +334,8 @@ namespace ScreenLine.Tests
             SetCursorPos((int)origin.X, (int)origin.Y); mouse_event(2, 0, 0, 0, UIntPtr.Zero); mouse_event(4, 0, 0, 0, UIntPtr.Zero); await Task.Delay(40);
             var input = ((Canvas)((Grid)capture.Content).Children[1]).Children.OfType<TextBox>().Single();
             Check(input.IsVisible && input.IsKeyboardFocused, "文字工具打开原地输入框");
-            input.Text = "截图标注 · 图架 1.0.1"; Click(capture.Tools["选择"]);
-            Check(capture.Surface.Marks.Last().Text == "截图标注 · 图架 1.0.1", "文字标注保留中文内容");
+            input.Text = "截图标注 · 图架 1.0.2"; Click(capture.Tools["选择"]);
+            Check(capture.Surface.Marks.Last().Text == "截图标注 · 图架 1.0.2", "文字标注保留中文内容");
             Export("区域截图与基础编辑", capture);
             await Drag(new Point(120, 160), new Point(140, 180));
             Check(capture.Selection == new Rect(140, 180, 620, 360), "拖动选区角点可调整截图边界");
@@ -332,6 +363,13 @@ namespace ScreenLine.Tests
             Check(controller.Capture == first, "重复截图请求只保留一个窗口");
             first.Close(); await Task.Delay(100);
             Check(!controller.Shelf.Capturing && controller.Capture == null && Directory.GetFiles(controller.Gallery.Store.Inbox).Length == files, "取消后解除截图状态且不留临时文件");
+            var captureSource = controller.CaptureSource;
+            controller.CaptureSource = delegate { throw new InvalidOperationException("模拟抓屏失败"); };
+            controller.Shelf.Reveal(true, false, 4); await Task.Delay(200);
+            controller.ShowCapture();
+            await Until(delegate { return !controller.Shelf.Capturing; });
+            Check(controller.Shelf.Revealed && controller.Shelf.IsVisible, "抓屏异常后恢复截图前的货架展开状态");
+            controller.CaptureSource = captureSource;
         }
 
         static async Task<int> ClipboardWidth()

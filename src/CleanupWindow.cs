@@ -17,6 +17,8 @@ namespace ScreenLine
         internal readonly TextBox DaysBox, ThresholdBox;
         internal readonly TextBlock UsageText, StatusText;
         internal readonly Button SaveButton;
+        bool closed;
+        int usageVersion;
 
         public CleanupWindow(StateStore store, Func<long> usage, Func<Task<CleanupResult>> check)
         {
@@ -24,7 +26,8 @@ namespace ScreenLine
             this.usage = usage;
             this.check = check;
             Title = "存储与清理";
-            Width = 520; Height = 480;
+            Width = 520; SizeToContent = SizeToContent.Height;
+            MaxHeight = Math.Max(420, SystemParameters.WorkArea.Height - 40);
             WindowStyle = WindowStyle.None; ResizeMode = ResizeMode.NoResize;
             AllowsTransparency = true; Background = Brushes.Transparent;
             ShowInTaskbar = false; Topmost = true;
@@ -45,7 +48,7 @@ namespace ScreenLine
                 Text = "只清理 ShotShelf 收集目录中的截图；图片篮子中的全部图片、桌面挂图和编辑器图片会保留。",
                 FontSize = 12, Foreground = LightTheme.Brush("#65717F"), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 16)
             });
-            UsageText = new TextBlock { Text = "", FontSize = 14, FontWeight = FontWeights.SemiBold, Foreground = LightTheme.Brush("#283343"), Margin = new Thickness(0, 0, 0, 14) };
+            UsageText = new TextBlock { Text = "当前截图占用 正在计算…", FontSize = 14, FontWeight = FontWeights.SemiBold, Foreground = LightTheme.Brush("#283343"), Margin = new Thickness(0, 0, 0, 14) };
             body.Children.Add(UsageText);
             EnabledBox = new CheckBox { Content = "自动清理截图", FontSize = 13, Foreground = LightTheme.Brush("#283343"), VerticalContentAlignment = VerticalAlignment.Center };
             AutomationProperties.SetAutomationId(EnabledBox, "cleanup-enabled");
@@ -95,10 +98,17 @@ namespace ScreenLine
             body.Children.Add(actions);
             var card = LightTheme.Card(body);
             card.Padding = new Thickness(24);
-            Content = card;
+            Content = new ScrollViewer
+            {
+                Content = card,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+                MaxHeight = Math.Max(360, SystemParameters.WorkArea.Height - 120)
+            };
             EnabledBox.IsChecked = store.State.AutoCleanEnabled;
             DaysBox.Text = store.State.AutoCleanDays.ToString();
             ThresholdBox.Text = store.State.AutoCleanThresholdMb.ToString();
+            Closed += delegate { closed = true; usageVersion++; };
             RefreshUsage();
             PreviewKeyDown += delegate(object sender, KeyEventArgs args) { if (args.Key == Key.Escape) Close(); };
         }
@@ -114,9 +124,22 @@ namespace ScreenLine
             };
         }
 
-        void RefreshUsage()
+        async void RefreshUsage()
         {
-            UsageText.Text = "当前截图占用 " + CleanupRules.FormatBytes(usage == null ? 0 : usage());
+            int version = ++usageVersion;
+            UsageText.Text = "当前截图占用 正在计算…";
+            try
+            {
+                long bytes = await Task.Run(() => usage == null ? 0 : usage());
+                if (closed || version != usageVersion) return;
+                UsageText.Text = "当前截图占用 " + CleanupRules.FormatBytes(bytes);
+            }
+            catch (Exception error)
+            {
+                if (closed || version != usageVersion) return;
+                store.Log(error);
+                UsageText.Text = "当前截图占用 无法读取";
+            }
         }
 
         void Error(string message)
@@ -152,6 +175,9 @@ namespace ScreenLine
                 state.AutoCleanEnabled = previousEnabled;
                 state.AutoCleanDays = previousDays;
                 state.AutoCleanThresholdMb = previousThreshold;
+                EnabledBox.IsChecked = previousEnabled;
+                DaysBox.Text = previousDays.ToString();
+                ThresholdBox.Text = previousThreshold.ToString();
                 store.Log(error);
                 Error("保存失败，请重试。");
                 return;
@@ -168,15 +194,15 @@ namespace ScreenLine
                 catch (Exception error)
                 {
                     store.Log(error);
-                    if (!IsVisible) return;
+                    if (closed) return;
                     RefreshUsage();
                     Error("保存成功，但清理检查未完成，请稍后重试。");
                     return;
                 }
-                if (!IsVisible) return;
+                if (closed) return;
             }
             RefreshUsage();
-            StatusText.Foreground = LightTheme.Brush(result != null && !result.ReachedThreshold ? "#B4372E" : "#65717F");
+            StatusText.Foreground = LightTheme.Brush(result != null && (!result.ReachedThreshold || result.Failed || result.Closed) ? "#B4372E" : "#65717F");
             StatusText.Text = CleanupRules.Describe(result, state.AutoCleanThresholdMb);
         }
     }

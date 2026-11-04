@@ -25,6 +25,7 @@ namespace ScreenLine
         public string Error;
         public readonly List<string> Failures = new List<string>();
         public readonly List<string> FailureReasons = new List<string>();
+        public readonly List<string> FailurePaths = new List<string>();
     }
 
     internal static class ExportRules
@@ -81,6 +82,7 @@ namespace ScreenLine
             {
                 root = Path.GetFullPath(request.Destination);
                 Directory.CreateDirectory(root);
+                CleanupStaleTemporary(root, DateTime.UtcNow);
             }
             catch (Exception error)
             {
@@ -124,7 +126,7 @@ namespace ScreenLine
                 }
                 catch (Exception error)
                 {
-                    result.Failures.Add(display); result.FailureReasons.Add(error.Message);
+                    result.Failures.Add(display); result.FailureReasons.Add(error.Message); result.FailurePaths.Add(path);
                 }
                 done += 1;
                 if (progress != null) progress(done, files.Length);
@@ -168,7 +170,7 @@ namespace ScreenLine
                         }
                         catch (Exception error)
                         {
-                            result.Failures.Add(display); result.FailureReasons.Add(error.Message);
+                            result.Failures.Add(display); result.FailureReasons.Add(error.Message); result.FailurePaths.Add(path);
                         }
                         finally { TryDelete(staged); }
                         done += 1;
@@ -199,6 +201,25 @@ namespace ScreenLine
         static void TryDelete(string path)
         {
             try { if (path != null && File.Exists(path)) File.Delete(path); }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+        }
+
+        // 只清理目标目录里超过一天的导出临时文件，避免崩溃残留长期占用空间。
+        internal static void CleanupStaleTemporary(string directory, DateTime nowUtc)
+        {
+            try
+            {
+                foreach (string path in Directory.EnumerateFiles(directory, ExportRules.Prefix + "*.zip.tmp", SearchOption.TopDirectoryOnly))
+                {
+                    try
+                    {
+                        if (File.GetLastWriteTimeUtc(path) < nowUtc.AddHours(-24)) File.Delete(path);
+                    }
+                    catch (IOException) { }
+                    catch (UnauthorizedAccessException) { }
+                }
+            }
             catch (IOException) { }
             catch (UnauthorizedAccessException) { }
         }

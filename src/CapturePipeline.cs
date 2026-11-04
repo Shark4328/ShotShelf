@@ -34,6 +34,7 @@ namespace ScreenLine
         Point? clipboardOrigin;
         int ticks;
         public event Action<CaptureItem, Point?> Arrived;
+        public event Action<CaptureItem> Stored;
         public event Action<string> Failed;
 
         public CapturePipeline(Gallery gallery, Dispatcher dispatcher, string folder)
@@ -223,8 +224,15 @@ namespace ScreenLine
             await Task.Run(() => File.WriteAllBytes(path, png));
             if (disposed) return path;
             receipts.Accept(image.Fingerprint, CaptureSource.Clipboard, DateTime.UtcNow);
-            if (AutoHang) { gallery.Add(path, image); if (Arrived != null) Arrived(gallery.Items.Last(), null); }
-            else gallery.Collect(path, image);
+            CaptureItem item;
+            if (AutoHang)
+            {
+                gallery.Add(path, image);
+                item = gallery.Items.Last();
+                if (Arrived != null) Arrived(item, null);
+            }
+            else item = gallery.Collect(path, image);
+            if (Stored != null) Stored(item);
             var data = new DataObject(); data.SetImage(picture); data.SetData("PNG", new MemoryStream(png)); data.SetData(ClipboardRules.OwnFormat, "1");
             data.SetFileDropList(new System.Collections.Specialized.StringCollection { path });
             await WindowsClipboard.Write(data); IgnoreCurrentClipboard();

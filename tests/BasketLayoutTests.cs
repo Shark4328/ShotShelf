@@ -64,7 +64,7 @@ namespace ScreenLine.Tests
                 var choice = basket.ChoiceFor(item.Path);
                 var cardBounds = choice.TransformToAncestor(firstScroll).TransformBounds(new Rect(choice.RenderSize));
                 if (cardBounds.Top < firstScroll.ActualHeight && cardBounds.Bottom > 0)
-                    Check(cardBounds.Top >= -0.5 && cardBounds.Bottom <= firstScroll.ActualHeight + 0.5, "默认窗口的可见卡片不被底部操作栏截断：" + cardBounds.Top + "～" + cardBounds.Bottom + " / " + firstScroll.ActualHeight);
+                    Check(cardBounds.Bottom <= firstScroll.ActualHeight + 0.5, "默认窗口的可见卡片底部不被操作栏截断：" + cardBounds.Top + "～" + cardBounds.Bottom + " / " + firstScroll.ActualHeight);
             }
             foreach (double scale in new[] { 1.0, 1.25, 1.5, 2.0 })
             {

@@ -22,6 +22,8 @@ namespace ScreenLine
         public int ProtectedSkipped;
         public bool ReachedThreshold;
         public bool Skipped;
+        public bool Busy;
+        public bool Closed;
         public bool Failed;
         public readonly List<string> Failures = new List<string>();
     }
@@ -53,7 +55,8 @@ namespace ScreenLine
         // 把一次清理的结果整理成可直接显示给用户的文字。
         internal static string Describe(CleanupResult result, int thresholdMb)
         {
-            if (result == null) return "已有清理任务正在运行，请稍后重试。";
+            if (result == null || result.Busy) return "已有清理任务正在运行，请稍后重试。";
+            if (result.Closed) return "程序正在退出，本次清理未执行。";
             if (result.Failed) return "清理检查未完成，请稍后重试；当前占用 " + FormatBytes(result.RemainingBytes) + "。详情见 error.log。";
             if (result.Skipped) return "自动清理已关闭，未删除文件。当前占用 " + FormatBytes(result.RemainingBytes) + "。";
             string text = result.Deleted > 0

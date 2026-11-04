@@ -108,13 +108,16 @@ namespace ScreenLine.Tests
                     await Task.Delay(30);
                 }
                 Check(capture.Surface.StaticLayerBuilds == staticBuilds, "连续移动鼠标只刷新动态层，静态底图不重建");
-                string appSource = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "App.cs"));
-                if (File.Exists(appSource))
-                {
-                    string source = File.ReadAllText(appSource);
-                    Check(!source.Contains("Task.Delay(260)"), "截图流程不再固定等待 260ms");
-                    Check(source.Contains("Shelf.HideForCapture()") && source.Contains("await Shelf.WaitHidden()") && source.Contains("await CaptureShotRules.CaptureAsync(display)"), "抓屏在货架实际隐藏后交给后台完成");
-                }
+                string appSource = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "src", "App.cs"));
+                string shelfSource = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "src", "ShelfWindow.cs"));
+                Check(File.Exists(appSource) && File.Exists(shelfSource), "截图源码路径可正确定位");
+                string source = File.ReadAllText(appSource), shelfCode = File.ReadAllText(shelfSource);
+                Check(!source.Contains("Task.Delay(260)"), "截图流程不再固定等待 260ms");
+                Check(source.Contains("Shelf.HideForCapture()") && source.Contains("await Shelf.WaitHidden()") && source.Contains("await CaptureSource(display)"), "抓屏在货架实际隐藏后交给可注入的后台源完成");
+                Check(source.Contains("internal Func<Forms.Screen, Task<CaptureShot>> CaptureSource"), "截图源可注入以便验证失败与取消路径");
+                Check(shelfCode.Contains("internal async Task<bool> WaitHidden()") && shelfCode.Contains("Task.Delay(600)") && shelfCode.Contains("completed == waiter.Task"),
+                    "货架隐藏等待有 600ms 超时并返回真实完成状态");
+                Check(shelfCode.Contains("internal void HideImmediately()") && shelfCode.Contains("internal void RestoreVisibility()"), "截图流程提供立即隐藏与可见性恢复");
                 SetCursorPos(screen.Bounds.Left + 250, screen.Bounds.Top + 180); await Task.Delay(80);
                 mouse_event(2, 0, 0, 0, UIntPtr.Zero); mouse_event(4, 0, 0, 0, UIntPtr.Zero); await Task.Delay(120);
                 Check(capture.Selection == upper, "单击自动识别的窗口并建立选区");
@@ -164,6 +167,10 @@ namespace ScreenLine.Tests
                     Check(!shelf.Revealed, "截图前货架已完成收起");
                     Check(hideTimer.ElapsedMilliseconds >= 80 && hideTimer.ElapsedMilliseconds <= 300,
                         "等待货架真实收起完成，实际 " + hideTimer.ElapsedMilliseconds + "ms");
+                    shelf.HideImmediately();
+                    Check(shelf.Visibility == Visibility.Hidden, "等待超时后的强制隐藏立即生效");
+                    shelf.RestoreVisibility();
+                    Check(shelf.Visibility == Visibility.Visible, "抓屏结束后恢复窗口可见性");
                 }
                 finally { shelf.Close(); }
             }

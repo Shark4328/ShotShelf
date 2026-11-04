@@ -11,9 +11,11 @@ namespace ScreenLine
     internal sealed class LightNotice : Window
     {
         readonly DispatcherTimer timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
+        internal string Message { get; private set; }
 
         public LightNotice(string message)
         {
+            Message = message;
             Title = "图架提示";
             AutomationProperties.SetAutomationId(this, "LightNotice");
             Width = 380; SizeToContent = SizeToContent.Height;
@@ -23,7 +25,7 @@ namespace ScreenLine
             FontFamily = new FontFamily("Segoe UI");
             var content = new StackPanel();
             var heading = new Grid { Margin = new Thickness(0, 0, 0, 8) };
-            heading.Children.Add(new TextBlock { Text = "截图晾衣绳", FontSize = 13, FontWeight = FontWeights.SemiBold, Foreground = LightTheme.Brush("#283343"), VerticalAlignment = VerticalAlignment.Center });
+            heading.Children.Add(new TextBlock { Text = "ShotShelf · 图架", FontSize = 13, FontWeight = FontWeights.SemiBold, Foreground = LightTheme.Brush("#283343"), VerticalAlignment = VerticalAlignment.Center });
             var close = LightTheme.Button("×", Close, "quiet");
             close.Width = close.Height = 24; close.MinWidth = 0; close.Padding = new Thickness(0); close.FontSize = 18;
             close.HorizontalAlignment = HorizontalAlignment.Right;
