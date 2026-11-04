@@ -10,7 +10,8 @@ namespace ScreenLine
     {
         public const int ShowMessage = 0x8001;
         public const int ExitMessage = 0x8002;
-        public const string MessageWindow = "ScreenLine.Windows.Messages";
+        public const string InstanceMutex = @"Local\Shark4328.ShotShelf.Windows";
+        public const string MessageWindow = "Shark4328.ShotShelf.Messages";
         public static readonly IntPtr MessageParent = new IntPtr(-3);
 
         [StructLayout(LayoutKind.Sequential)]

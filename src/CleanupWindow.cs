@@ -12,18 +12,19 @@ namespace ScreenLine
     {
         readonly StateStore store;
         readonly Func<long> usage;
-        readonly Func<Task> check;
+        readonly Func<Task<CleanupResult>> check;
         internal readonly CheckBox EnabledBox;
         internal readonly TextBox DaysBox, ThresholdBox;
         internal readonly TextBlock UsageText, StatusText;
+        internal readonly Button SaveButton;
 
-        public CleanupWindow(StateStore store, Func<long> usage, Func<Task> check)
+        public CleanupWindow(StateStore store, Func<long> usage, Func<Task<CleanupResult>> check)
         {
             this.store = store;
             this.usage = usage;
             this.check = check;
             Title = "存储与清理";
-            Width = 520; Height = 452;
+            Width = 520; Height = 480;
             WindowStyle = WindowStyle.None; ResizeMode = ResizeMode.NoResize;
             AllowsTransparency = true; Background = Brushes.Transparent;
             ShowInTaskbar = false; Topmost = true;
@@ -41,7 +42,7 @@ namespace ScreenLine
             body.Children.Add(heading);
             body.Children.Add(new TextBlock
             {
-                Text = "只清理 ShotShelf 收集目录中的截图；篮子与桌面上正在使用的图片会保留。",
+                Text = "只清理 ShotShelf 收集目录中的截图；图片篮子中的全部图片、桌面挂图和编辑器图片会保留。",
                 FontSize = 12, Foreground = LightTheme.Brush("#65717F"), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 16)
             });
             UsageText = new TextBlock { Text = "", FontSize = 14, FontWeight = FontWeights.SemiBold, Foreground = LightTheme.Brush("#283343"), Margin = new Thickness(0, 0, 0, 14) };
@@ -88,9 +89,9 @@ namespace ScreenLine
             var cancel = LightTheme.Button("取消", Close);
             cancel.Margin = new Thickness(0, 0, 8, 0);
             actions.Children.Add(cancel);
-            var save = LightTheme.Button("保存并检查", Save, "primary");
-            AutomationProperties.SetAutomationId(save, "cleanup-save");
-            actions.Children.Add(save);
+            SaveButton = LightTheme.Button("保存并检查", Save, "primary");
+            AutomationProperties.SetAutomationId(SaveButton, "cleanup-save");
+            actions.Children.Add(SaveButton);
             body.Children.Add(actions);
             var card = LightTheme.Card(body);
             card.Padding = new Thickness(24);
@@ -160,14 +161,23 @@ namespace ScreenLine
             RefreshUsage();
             if (!state.AutoCleanEnabled) { StatusText.Text = "已保存，自动清理已关闭。"; return; }
             StatusText.Text = "已保存，正在检查…";
+            CleanupResult result = null;
             if (check != null)
             {
-                try { await check(); }
-                catch (Exception error) { store.Log(error); }
+                try { result = await check(); }
+                catch (Exception error)
+                {
+                    store.Log(error);
+                    if (!IsVisible) return;
+                    RefreshUsage();
+                    Error("保存成功，但清理检查未完成，请稍后重试。");
+                    return;
+                }
                 if (!IsVisible) return;
             }
             RefreshUsage();
-            StatusText.Text = "已保存，检查完成。";
+            StatusText.Foreground = LightTheme.Brush(result != null && !result.ReachedThreshold ? "#B4372E" : "#65717F");
+            StatusText.Text = CleanupRules.Describe(result, state.AutoCleanThresholdMb);
         }
     }
 }

@@ -22,6 +22,7 @@ namespace ScreenLine
         public int ProtectedSkipped;
         public bool ReachedThreshold;
         public bool Skipped;
+        public bool Failed;
         public readonly List<string> Failures = new List<string>();
     }
 
@@ -47,6 +48,30 @@ namespace ScreenLine
             value /= 1024.0;
             if (value < 1024) return value.ToString("0.#") + " MB";
             return (value / 1024.0).ToString("0.##") + " GB";
+        }
+
+        // 把一次清理的结果整理成可直接显示给用户的文字。
+        internal static string Describe(CleanupResult result, int thresholdMb)
+        {
+            if (result == null) return "已有清理任务正在运行，请稍后重试。";
+            if (result.Failed) return "清理检查未完成，请稍后重试；当前占用 " + FormatBytes(result.RemainingBytes) + "。详情见 error.log。";
+            if (result.Skipped) return "自动清理已关闭，未删除文件。当前占用 " + FormatBytes(result.RemainingBytes) + "。";
+            string text = result.Deleted > 0
+                ? "已删除 " + result.Deleted + " 张截图，释放 " + FormatBytes(result.FreedBytes) + "；当前占用 " + FormatBytes(result.RemainingBytes) + "。"
+                : "没有删除文件；当前占用 " + FormatBytes(result.RemainingBytes) + "。";
+            if (!result.ReachedThreshold)
+                text += "\n仍高于 " + thresholdMb + " MB 阈值"
+                    + (result.ProtectedSkipped > 0 ? "，图片篮子、桌面挂图和编辑器中的图片已保留。" : "，部分文件正在使用或无法删除。");
+            else if (result.ProtectedSkipped > 0)
+                text += "\n保留了 " + result.ProtectedSkipped + " 个正在使用的文件。";
+            if (result.Failures.Count > 0)
+            {
+                int shown = Math.Min(3, result.Failures.Count);
+                text += "\n" + result.Failures.Count + " 个文件未能删除：" + string.Join("、", result.Failures.Take(shown).ToArray());
+                if (result.Failures.Count > shown) text += " 等";
+                text += "。";
+            }
+            return text;
         }
     }
 

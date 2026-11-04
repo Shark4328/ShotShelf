@@ -87,6 +87,31 @@ namespace ScreenLine.Tests
                 var zip = ExportService.Run(new ExportRequest { Scope = ExportScope.All, Format = ExportFormat.Zip, Destination = target, Files = new[] { missing } }, null);
                 Check(zip.Error != null && Directory.GetFiles(target).Length == 0);
             });
+            Run("导出：锁定文件不会在 ZIP 中留下空条目", delegate
+            {
+                string source = Path.Combine(root, "export-locked-source"), target = Path.Combine(root, "export-locked-out");
+                Directory.CreateDirectory(target);
+                int stagedBefore = Directory.GetFiles(Path.GetTempPath(), "ShotShelf-export-*.tmp").Length;
+                string valid = WriteExport(source, "正常.png", 9);
+                string locked = WriteExport(source, "锁定.png", 10);
+                using (var stream = new FileStream(locked, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+                {
+                    var zip = ExportService.Run(new ExportRequest { Scope = ExportScope.All, Format = ExportFormat.Zip, Destination = target, Files = new[] { valid, locked } }, null);
+                    Check(zip.Error == null && zip.Succeeded == 1 && zip.Failures.Count == 1 && zip.Failures[0] == "锁定.png");
+                    using (var archive = ZipFile.OpenRead(zip.Output))
+                    {
+                        Check(archive.Entries.Count == 1 && archive.Entries[0].FullName == "正常.png");
+                        using (var entry = archive.Entries[0].Open())
+                        using (var memory = new MemoryStream())
+                        {
+                            entry.CopyTo(memory);
+                            Check(memory.Length > 0);
+                        }
+                    }
+                }
+                Check(Directory.GetFiles(target, "*.tmp").Length == 0);
+                Check(Directory.GetFiles(Path.GetTempPath(), "ShotShelf-export-*.tmp").Length == stagedBefore);
+            });
             Run("自动清理：超过保留天数的最旧截图先删除，三天边界一致", delegate
             {
                 string inbox = Path.Combine(root, "cleanup-age", "Captures");
@@ -188,6 +213,22 @@ namespace ScreenLine.Tests
                 store.Save();
                 var restored = new StateStore(profile);
                 Check(!restored.State.AutoCleanEnabled && restored.State.AutoCleanDays == 7 && restored.State.AutoCleanThresholdMb == 1200);
+            });
+            Run("自动清理：结果文字包含删除数量、释放空间与未达标提示", delegate
+            {
+                var result = new CleanupResult { Deleted = 2, FreedBytes = 3 * 1024 * 1024, RemainingBytes = 7 * 1024 * 1024, ReachedThreshold = false, ProtectedSkipped = 1 };
+                string text = CleanupRules.Describe(result, 5);
+                Check(text.Contains("已删除 2 张") && text.Contains("释放 3 MB") && text.Contains("当前占用 7 MB") && text.Contains("仍高于 5 MB 阈值"));
+                string failedText = CleanupRules.Describe(new CleanupResult { Failed = true, RemainingBytes = 2 * 1024 * 1024 }, 5);
+                Check(failedText.Contains("清理检查未完成") && failedText.Contains("当前占用 2 MB"));
+            });
+            Run("启动失败会写入 error.log 并给出可理解的提示", delegate
+            {
+                string profile = Path.Combine(root, "startup-failure");
+                var store = new StateStore(profile);
+                StartupFailure.Report(store, new InvalidOperationException("初始化步骤失败"));
+                string log = File.ReadAllText(Path.Combine(profile, "error.log"));
+                Check(log.Contains("初始化步骤失败") && StartupFailure.Message.Contains("初始化失败") && StartupFailure.Title.Contains("ShotShelf"));
             });
             Run("弹簧在不同帧率下有一致轨迹", delegate
             {
@@ -537,7 +578,7 @@ namespace ScreenLine.Tests
         static void Run(string name, Action test)
         {
             try { test(); passed++; Console.WriteLine("通过：" + name); }
-            catch (Exception error) { failed++; Console.WriteLine("失败：" + name + " " + error.Message); }
+            catch (Exception error) { failed++; Console.WriteLine("失败：" + name + " " + error); }
         }
     }
 }

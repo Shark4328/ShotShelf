@@ -19,9 +19,9 @@ using Forms = System.Windows.Forms;
 [assembly: AssemblyTitle("ShotShelf · 图架")]
 [assembly: AssemblyProduct("ShotShelf")]
 [assembly: AssemblyDescription("图架：把截图挂在屏幕上沿，随手复制、拖拽和保存。")]
-[assembly: AssemblyVersion("1.0.0.0")]
-[assembly: AssemblyFileVersion("1.0.0.0")]
-[assembly: AssemblyInformationalVersion("1.0.0")]
+[assembly: AssemblyVersion("1.0.1.0")]
+[assembly: AssemblyFileVersion("1.0.1.0")]
+[assembly: AssemblyInformationalVersion("1.0.1")]
 
 namespace ScreenLine
 {
@@ -293,15 +293,17 @@ namespace ScreenLine
 
         long CleanupUsage() { return CaptureCleanup.DirectoryBytes(Gallery.Store.Inbox); }
 
-        internal async Task RunCleanup()
+        internal async Task<CleanupResult> RunCleanup()
         {
-            if (disposed || cleaning) return;
+            if (disposed || cleaning) return null;
             var state = Gallery.Store.State;
-            if (!state.AutoCleanEnabled) return;
+            if (!state.AutoCleanEnabled) return new CleanupResult { Skipped = true, RemainingBytes = CleanupUsage() };
             cleaning = true;
             try
             {
                 var protectedFiles = new List<string>();
+                // 整个图片篮子都受保护，而不只是当前选中或预览的图片。
+                foreach (var item in Gallery.Collected) protectedFiles.Add(item.Path);
                 foreach (var item in Gallery.Items) protectedFiles.Add(item.Path);
                 foreach (var pin in Shelf.PinWindows) protectedFiles.Add(pin.Item.Path);
                 foreach (var editor in Editors) if (!string.IsNullOrEmpty(editor.ImagePath)) protectedFiles.Add(editor.ImagePath);
@@ -313,7 +315,7 @@ namespace ScreenLine
                 };
                 string inbox = Gallery.Store.Inbox;
                 CleanupResult result = await Task.Run(() => CaptureCleanup.Run(inbox, options));
-                if (disposed) return;
+                if (disposed) return null;
                 state.LastCleanupUtc = DateTime.UtcNow;
                 if (result.Deleted > 0) { Gallery.Prune(); Shelf.Update(); }
                 bool notify = !result.ReachedThreshold
@@ -323,8 +325,13 @@ namespace ScreenLine
                 catch (Exception error) { Gallery.Store.Log(error); }
                 if (notify)
                     Notice("截图占用仍高于 " + state.AutoCleanThresholdMb + " MB，剩余 " + CleanupRules.FormatBytes(result.RemainingBytes) + "；正在使用的图片已保留。");
+                return result;
             }
-            catch (Exception error) { if (!disposed) Gallery.Store.Log(error); }
+            catch (Exception error)
+            {
+                if (!disposed) Gallery.Store.Log(error);
+                return new CleanupResult { Failed = true, RemainingBytes = CleanupUsage() };
+            }
             finally { cleaning = false; }
         }
 
@@ -556,7 +563,7 @@ namespace ScreenLine
         {
             if (Array.IndexOf(arguments, "--quit") >= 0) { WindowsNative.RequestExit(); return; }
             bool first;
-            using (var instance = new Mutex(true, @"Local\TangHao.ScreenLine.Windows", out first))
+            using (var instance = new Mutex(true, WindowsNative.InstanceMutex, out first))
             {
                 if (!first) { WindowsNative.ShowExisting(); return; }
                 var store = new StateStore(StateStore.DefaultRoot);
@@ -564,7 +571,21 @@ namespace ScreenLine
                 LightTheme.Install(app);
                 DesktopController controller = null;
                 app.DispatcherUnhandledException += delegate(object sender, System.Windows.Threading.DispatcherUnhandledExceptionEventArgs args) { store.Log(args.Exception); args.Handled = true; };
-                app.Startup += async delegate { controller = new DesktopController(store, WindowsNative.ScreenshotFolder()); await controller.Start(); };
+                app.Startup += async delegate
+                {
+                    try
+                    {
+                        controller = new DesktopController(store, WindowsNative.ScreenshotFolder());
+                        await controller.Start();
+                    }
+                    catch (Exception error)
+                    {
+                        StartupFailure.Report(store, error);
+                        StartupFailure.Dispose(store, controller); controller = null;
+                        MessageBox.Show(StartupFailure.Message, StartupFailure.Title, MessageBoxButton.OK, MessageBoxImage.Error);
+                        app.Shutdown(1);
+                    }
+                };
                 app.Exit += delegate { if (controller != null) controller.Dispose(); };
                 app.Run();
             }

@@ -52,7 +52,7 @@ namespace ScreenLine.Tests
                     }
                     clipboard = snapshot;
                 }
-                try { await Run(); Console.WriteLine("1.0.0 专项验证：{0} 项通过", checks); }
+                try { await Run(); Console.WriteLine("1.0.1 专项验证：{0} 项通过", checks); }
                 catch (Exception error) { Console.WriteLine("专项验证失败：" + error); Environment.ExitCode = 1; }
                 finally
                 {
@@ -198,6 +198,32 @@ namespace ScreenLine.Tests
             var thumb = ((Grid)((Border)((StackPanel)basket.ChoiceFor(controller.Gallery.Collected[1].Path).Content).Children[0]).Child).Children.OfType<Image>().Single();
             Check(thumb.Source != null, "进入当前标签后可见缩略图按需显示");
             Export("图片全选", basket); basket.Close();
+            string oldBasketOne = Path.Combine(store.Inbox, "未选中的旧图一.png");
+            string oldBasketTwo = Path.Combine(store.Inbox, "未选中的旧图二.png");
+            Directory.CreateDirectory(store.Inbox);
+            File.WriteAllBytes(oldBasketOne, ImageContent.EncodeClipboard(Pattern(50, 40)));
+            File.WriteAllBytes(oldBasketTwo, ImageContent.EncodeClipboard(Pattern(50, 40)));
+            File.SetLastWriteTimeUtc(oldBasketOne, DateTime.UtcNow.AddDays(-30));
+            File.SetLastWriteTimeUtc(oldBasketTwo, DateTime.UtcNow.AddDays(-30));
+            var oldBasketItemOne = controller.Gallery.Collect(oldBasketOne, ImageContent.Read(oldBasketOne));
+            var oldBasketItemTwo = controller.Gallery.Collect(oldBasketTwo, ImageContent.Read(oldBasketTwo));
+            bool autoCleanEnabled = store.State.AutoCleanEnabled;
+            int autoCleanDays = store.State.AutoCleanDays, autoCleanThreshold = store.State.AutoCleanThresholdMb;
+            store.State.AutoCleanEnabled = true; store.State.AutoCleanDays = 3; store.State.AutoCleanThresholdMb = 1;
+            var cleanup = await controller.RunCleanup();
+            Check(File.Exists(oldBasketOne) && File.Exists(oldBasketTwo) && cleanup != null && cleanup.ProtectedSkipped >= 2,
+                "未选中、未预览的旧篮子截图不会被自动清理");
+            var cleanupResult = new CleanupResult { Deleted = 2, FreedBytes = 3 * 1024 * 1024, RemainingBytes = 7 * 1024 * 1024, ReachedThreshold = false, ProtectedSkipped = 1 };
+            var cleanupWindow = new CleanupWindow(store, delegate { return cleanupResult.RemainingBytes; }, delegate { return Task.FromResult(cleanupResult); });
+            cleanupWindow.Show(); cleanupWindow.UpdateLayout();
+            Click(cleanupWindow.SaveButton);
+            await Until(delegate { return cleanupWindow.StatusText.Text.Contains("已删除 2 张"); });
+            Check(cleanupWindow.StatusText.Text.Contains("释放 3 MB") && cleanupWindow.StatusText.Text.Contains("当前占用 7 MB")
+                && cleanupWindow.StatusText.Text.Contains("仍高于 1 MB"), "存储窗口显示删除数量、释放空间与剩余占用");
+            cleanupWindow.Close();
+            store.State.AutoCleanEnabled = autoCleanEnabled; store.State.AutoCleanDays = autoCleanDays; store.State.AutoCleanThresholdMb = autoCleanThreshold;
+            controller.Gallery.Forget(oldBasketItemOne); controller.Gallery.Forget(oldBasketItemTwo);
+            File.Delete(oldBasketOne); File.Delete(oldBasketTwo);
             controller.Texts.Add("会议：确认录制时间"); controller.Texts.Add("会议：整理演示材料"); controller.Texts.Add("保留的参考链接");
             controller.ShowTexts(); await Task.Delay(50);
             var texts = controller.TextWindow; texts.Search.Text = "会议"; Click(texts.SelectAllButton);
@@ -277,8 +303,8 @@ namespace ScreenLine.Tests
             SetCursorPos((int)origin.X, (int)origin.Y); mouse_event(2, 0, 0, 0, UIntPtr.Zero); mouse_event(4, 0, 0, 0, UIntPtr.Zero); await Task.Delay(40);
             var input = ((Canvas)((Grid)capture.Content).Children[1]).Children.OfType<TextBox>().Single();
             Check(input.IsVisible && input.IsKeyboardFocused, "文字工具打开原地输入框");
-            input.Text = "截图标注 · 图架 1.0.0"; Click(capture.Tools["选择"]);
-            Check(capture.Surface.Marks.Last().Text == "截图标注 · 图架 1.0.0", "文字标注保留中文内容");
+            input.Text = "截图标注 · 图架 1.0.1"; Click(capture.Tools["选择"]);
+            Check(capture.Surface.Marks.Last().Text == "截图标注 · 图架 1.0.1", "文字标注保留中文内容");
             Export("区域截图与基础编辑", capture);
             await Drag(new Point(120, 160), new Point(140, 180));
             Check(capture.Selection == new Rect(140, 180, 620, 360), "拖动选区角点可调整截图边界");
@@ -343,6 +369,7 @@ namespace ScreenLine.Tests
 
         static byte[] Pixel(BitmapSource image, int x, int y) { byte[] pixel = new byte[4]; new FormatConvertedBitmap(image, PixelFormats.Bgra32, null, 0).CopyPixels(new Int32Rect(x, y, 1, 1), pixel, 4, 0); return pixel; }
         static void Click(Button button) { button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); }
+        static async Task Until(Func<bool> condition) { for (int i = 0; i < 100; i++) { if (condition()) return; await Task.Delay(50); } throw new Exception("操作超时"); }
         static void Export(string name, FrameworkElement window) { window.UpdateLayout(); var bitmap = new RenderTargetBitmap((int)Math.Ceiling(window.ActualWidth), (int)Math.Ceiling(window.ActualHeight), 96, 96, PixelFormats.Pbgra32); bitmap.Render(window); Save(name, bitmap); }
         static void Save(string name, BitmapSource bitmap) { string directory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "release-preview"); Directory.CreateDirectory(directory); File.WriteAllBytes(Path.Combine(directory, name + ".png"), ImageContent.EncodeClipboard(bitmap)); }
         static void Check(bool condition, string message) { if (!condition) throw new Exception(message); checks++; Console.WriteLine("通过：" + message); }

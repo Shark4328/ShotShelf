@@ -145,9 +145,15 @@ namespace ScreenLine
                     foreach (string path in files)
                     {
                         string display = SafeFileName(path);
+                        string staged = null;
                         try
                         {
                             if (!File.Exists(path)) throw new FileNotFoundException("文件已被移动或清理");
+                            // 先把源文件完整读到暂存文件；读取失败时还不会创建 ZIP 条目。
+                            staged = Path.Combine(Path.GetTempPath(), "ShotShelf-export-" + Guid.NewGuid().ToString("N") + ".tmp");
+                            using (var input = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+                            using (var output = new FileStream(staged, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                                input.CopyTo(output);
                             string entryName = ExportRules.UniqueEntry(used, ExportRules.CleanName(display));
                             var entry = archive.CreateEntry(entryName, CompressionLevel.Optimal);
                             try
@@ -156,7 +162,7 @@ namespace ScreenLine
                                 if (written.Year >= 1980 && written.Year <= 2107) entry.LastWriteTime = written;
                             }
                             catch (Exception) { }
-                            using (var input = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+                            using (var input = new FileStream(staged, FileMode.Open, FileAccess.Read, FileShare.Read))
                             using (var output = entry.Open()) input.CopyTo(output);
                             result.Succeeded++;
                         }
@@ -164,6 +170,7 @@ namespace ScreenLine
                         {
                             result.Failures.Add(display); result.FailureReasons.Add(error.Message);
                         }
+                        finally { TryDelete(staged); }
                         done += 1;
                         if (progress != null) progress(done, files.Length);
                     }

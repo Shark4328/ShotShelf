@@ -132,8 +132,24 @@ namespace ScreenLine
             }
             string executable = Path.Combine(root, "app", "ShotShelf.exe");
             if (!File.Exists(executable) || FileVersionInfo.GetVersionInfo(executable).ProductVersion != version
-                || !File.Exists(Path.Combine(root, "app", "editor", "index.html")) || !File.Exists(Path.Combine(root, "app", "update.ps1")))
+                || !Complete(Path.Combine(root, "app", "ShotShelf.exe.config"))
+                || !Complete(Path.Combine(root, "app", "Microsoft.Web.WebView2.Core.dll"))
+                || !Complete(Path.Combine(root, "app", "Microsoft.Web.WebView2.Wpf.dll"))
+                || !Complete(Path.Combine(root, "app", "WebView2Loader.dll"))
+                || !Complete(Path.Combine(root, "app", "editor", "index.html"))
+                || !Complete(Path.Combine(root, "app", "editor", "editor.js"))
+                || !Complete(Path.Combine(root, "app", "editor", "editor.css"))
+                || !Complete(Path.Combine(root, "app", "editor", "translations.js"))
+                || !Complete(Path.Combine(root, "app", "editor", "filerobot-image-editor.min.js"))
+                || !Complete(Path.Combine(root, "app", "update.ps1")))
                 throw new InvalidDataException("更新包不完整或版本不匹配。");
+        }
+
+        static bool Complete(string path)
+        {
+            try { return File.Exists(path) && new FileInfo(path).Length > 0; }
+            catch (IOException) { return false; }
+            catch (UnauthorizedAccessException) { return false; }
         }
 
         public static void Install(string work)
