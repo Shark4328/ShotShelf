@@ -1189,8 +1189,19 @@ namespace ScreenLine
             Surface.ReleaseMouseCapture();
             var payload = new DataObject(DataFormats.FileDrop, new[] { Item.Path });
             var preview = new DragPreview(Item.Image.Thumbnail);
+            // OLE 拖拽在每次鼠标移动时回调 GiveFeedback，直接同步预览位置，
+            // 不依赖 Dispatcher 定时器的调度时机；定时器仅作兜底。
+            GiveFeedbackEventHandler feedback = delegate(object source, GiveFeedbackEventArgs args) { preview.Follow(); };
+            DragDrop.AddGiveFeedbackHandler(Surface, feedback);
             try { preview.Show(); DragDrop.DoDragDrop(Surface, payload, DragDropEffects.Copy | DragDropEffects.Move); }
-            finally { preview.Close(); dragging = false; Surface.Opacity = 1; }
+            finally
+            {
+                DragDrop.RemoveGiveFeedbackHandler(Surface, feedback);
+                preview.Follow();
+                preview.Close();
+                dragging = false;
+                Surface.Opacity = 1;
+            }
         }
 
         public void FlashCopied()
@@ -1205,7 +1216,9 @@ namespace ScreenLine
 
     internal sealed class DragPreview : Window
     {
-        readonly DispatcherTimer follow = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(25) };
+        // 拖拽是 OLE 嵌套消息循环，Background 优先级的定时器容易被饿死；
+        // 提高到 Render 优先级并缩短间隔，仅作为 GiveFeedback 之外的兜底。
+        readonly DispatcherTimer follow = new DispatcherTimer(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(8) };
         IntPtr handle;
 
         public DragPreview(System.Windows.Media.Imaging.BitmapSource image)
@@ -1227,6 +1240,10 @@ namespace ScreenLine
                 handle = new WindowInteropHelper(this).Handle;
                 WindowsNative.PrepareOverlay(handle);
                 WindowsNative.PassMouse(handle, true);
+                // DPI 缩放与窗口尺寸只算一次；之后每帧只移动，避免反复 WM_SIZE
+                // 与重设 Z 序引起的重绘、掉帧。0x12 = NOACTIVATE|NOMOVE（置顶+设尺寸）。
+                double dpi = WindowsNative.MonitorScale(WindowsNative.ScreenAtPointer());
+                WindowsNative.SetWindowPos(handle, new IntPtr(-1), 0, 0, (int)(Width * dpi), (int)(Height * dpi), 0x12);
                 Follow();
                 follow.Start();
             };
@@ -1234,11 +1251,12 @@ namespace ScreenLine
             Closed += delegate { follow.Stop(); };
         }
 
-        void Follow()
+        public void Follow()
         {
+            if (handle == IntPtr.Zero) return;
             var cursor = WindowsNative.Cursor();
-            double scale = WindowsNative.MonitorScale(WindowsNative.ScreenAtPointer());
-            WindowsNative.SetWindowPos(handle, new IntPtr(-1), cursor.X + 18, cursor.Y + 20, (int)(Width * scale), (int)(Height * scale), 0x10);
+            // 0x15 = NOACTIVATE|NOZORDER|NOSIZE：只改位置，保持与指针同步。
+            WindowsNative.SetWindowPos(handle, IntPtr.Zero, cursor.X + 18, cursor.Y + 20, 0, 0, 0x15);
         }
     }
 }

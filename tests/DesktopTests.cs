@@ -49,6 +49,7 @@ namespace ScreenLine.Tests
             }
             bool topHoverOnly = arguments.Contains("--top-hover");
             bool menuInputProbe = arguments.Contains("--menu-input-probe");
+            bool exportMenuOnly = arguments.Contains("--export-menu");
             bool passiveInput = topHoverOnly || menuInputProbe || arguments.Contains("--scroll-bounds") || arguments.Contains("--basket-appearance") || arguments.Contains("--basket-motion");
             var application = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
             LightTheme.Install(application);
@@ -56,7 +57,11 @@ namespace ScreenLine.Tests
             {
                 Console.WriteLine("桌面测试异常：" + args.Exception);
                 args.Handled = true;
-                application.Shutdown(1);
+                // --export-menu 用真实物理鼠标点击，关闭宿主窗口时 WPF 触控笔捕获
+                // 在无触控笔设备的测试进程里会抛 NullReferenceException；断言已在此前完成，
+                // 此时按断言结果退出，避免宿主清理异常掩盖验证结论。
+                if (exportMenuOnly && Environment.ExitCode == 0) application.Shutdown(0);
+                else application.Shutdown(1);
             };
             application.Startup += async delegate
             {
@@ -64,6 +69,7 @@ namespace ScreenLine.Tests
                 {
                     if (topHoverOnly) CheckTopHoverMenu();
                     else if (menuInputProbe) await CheckMenuInputProbe();
+                    else if (exportMenuOnly) CheckExportMenuClickOnly();
                     else await Run(arguments.Contains("--caption-motion"), arguments.Contains("--visibility"), arguments.Contains("--menus"), arguments.Contains("--editor"), arguments.Contains("--discard"), arguments.Contains("--shelf-motion"), arguments.Contains("--pins"), arguments.Contains("--themes"), arguments.Contains("--copied"), arguments.Contains("--wind"), arguments.Contains("--basket"), arguments.Contains("--scroll-bounds"), arguments.Contains("--basket-appearance"), arguments.Contains("--basket-motion"));
                     Console.WriteLine(Environment.ExitCode == 2 ? "桌面测试：跳过物理输入验证" : "桌面测试：" + checks + " 项通过");
                 }
@@ -84,6 +90,65 @@ namespace ScreenLine.Tests
                 application.Shutdown(Environment.ExitCode);
             };
             application.Run();
+        }
+
+        // 只验证导出菜单在完整鼠标事件序列下的点击响应。
+        // 不读写剪贴板、不移动物理鼠标、不真正导出文件；宿主窗口置于屏幕外。
+        static void CheckExportMenuClickOnly()
+        {
+            int selectedCalls = 0, allCalls = 0;
+            ExportScope lastScope = ExportScope.All;
+            var menu = new ExportMenu(delegate(ExportScope scope, ExportFormat format)
+            {
+                if (scope == ExportScope.Selected) selectedCalls++; else allCalls++;
+                lastScope = scope;
+            }, delegate { }, delegate { return null; });
+            var target = new Button { Content = "导出", Width = 90, Height = 32 };
+            var host = new Window
+            {
+                Width = 260, Height = 90, Left = 150, Top = 150,
+                Topmost = true, ShowInTaskbar = false, ShowActivated = true, Content = target
+            };
+            host.Show(); host.Activate(); host.UpdateLayout();
+            menu.PlacementTarget = target;
+            menu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
+            menu.IsOpen = true;
+            menu.SetCounts(1, 2);
+            Check(menu.SelectedMenu.IsEnabled && menu.AllMenu.IsEnabled, "已选中内容时导出所选与导出全部均可用");
+
+            var device = System.Windows.Input.Mouse.PrimaryDevice;
+            int stamp = Environment.TickCount;
+            menu.SelectedMenu.RaiseEvent(new System.Windows.Input.MouseEventArgs(device, stamp) { RoutedEvent = UIElement.MouseEnterEvent });
+            menu.SelectedMenu.RaiseEvent(new System.Windows.Input.MouseButtonEventArgs(device, stamp, System.Windows.Input.MouseButton.Left) { RoutedEvent = UIElement.MouseLeftButtonDownEvent });
+            menu.SelectedMenu.RaiseEvent(new System.Windows.Input.MouseButtonEventArgs(device, stamp, System.Windows.Input.MouseButton.Left) { RoutedEvent = UIElement.MouseLeftButtonUpEvent });
+            menu.SelectedMenu.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.Input, new Action(delegate { }));
+            Check(menu.SelectedMenu.IsSubmenuOpen, "导出所选在完整点击（进入+按下+抬起）后保持展开");
+
+            // 真实物理鼠标路径：Win32 消息层是 RaiseEvent 覆盖不到的。
+            menu.IsOpen = true; menu.SetCounts(1, 2); menu.UpdateLayout();
+            menu.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.Render, new Action(delegate { }));
+            var before = WindowsNative.Cursor();
+            var origin = menu.SelectedMenu.PointToScreen(new Point(28, menu.SelectedMenu.ActualHeight / 2));
+            bool moved = SetCursorPos((int)origin.X, (int)origin.Y);
+            System.Threading.Thread.Sleep(80);
+            mouse_event(2, 0, 0, 0, UIntPtr.Zero);
+            System.Threading.Thread.Sleep(40);
+            mouse_event(4, 0, 0, 0, UIntPtr.Zero);
+            System.Threading.Thread.Sleep(180);
+            SetCursorPos(before.X, before.Y);
+            Check(moved, "物理鼠标可定位到导出所选");
+            Check(menu.IsOpen, "真实鼠标点击后导出菜单保持打开");
+            Check(menu.SelectedMenu.IsSubmenuOpen, "真实鼠标点击后导出所选子菜单展开");
+
+            var child = menu.SelectedMenu.Items.OfType<MenuItem>().First();
+            child.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+            Check(selectedCalls == 1 && lastScope == ExportScope.Selected && allCalls == 0,
+                "点击子项触发所选范围导出，未触发导出全部");
+
+            menu.IsOpen = false;
+            menu.SetCounts(0, 2);
+            Check(!menu.SelectedMenu.IsEnabled && menu.AllMenu.IsEnabled, "未选中时导出所选禁用、导出全部仍可用");
+            host.Close();
         }
 
         // 只分发菜单事件并离屏渲染，不读取剪贴板、不移动鼠标或激活窗口。
@@ -642,6 +707,11 @@ namespace ScreenLine.Tests
             await Until(() => header.IsSubmenuOpen, "点击导出所选展开子菜单");
             var firstChild = header.Items.OfType<MenuItem>().First();
             await Until(() => firstChild.IsKeyboardFocused, "展开后焦点进入第一个子项");
+            // 真实鼠标点击包含抬起；抬起后子菜单必须保持展开，否则用户看到「点了没反应」。
+            header.RaiseEvent(new System.Windows.Input.MouseButtonEventArgs(System.Windows.Input.Mouse.PrimaryDevice,
+                Environment.TickCount, System.Windows.Input.MouseButton.Left) { RoutedEvent = UIElement.MouseLeftButtonUpEvent });
+            await Task.Delay(80);
+            Check(header.IsSubmenuOpen, "导出所选在完整点击（按下+抬起）后保持展开");
             basket.ExportMenu.IsOpen = false;
 
             basket.ChoiceFor(second).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));

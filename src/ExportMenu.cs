@@ -111,7 +111,9 @@ namespace ScreenLine
                 header.Items.Add(child);
             }
             header.MouseEnter += delegate { close.Stop(); header.IsSubmenuOpen = true; };
-            header.MouseLeftButtonDown += delegate(object sender, MouseButtonEventArgs args)
+            // 真实鼠标点击时 MenuItem / Menu 可能先把路由事件标记为已处理，普通 += 会收不到；
+            // 用 handledEventsToo 注册按下与抬起，保证已选中时「导出所选」一定能响应。
+            MouseButtonEventHandler down = delegate(object sender, MouseButtonEventArgs args)
             {
                 close.Stop();
                 if (!header.IsEnabled) return;
@@ -128,6 +130,16 @@ namespace ScreenLine
                 }), System.Windows.Threading.DispatcherPriority.Input);
                 args.Handled = true;
             };
+            // 抬起阶段兜底：若 MenuItem 在抬起时切换关闭子菜单，或焦点转移让菜单消失，
+            // 这里重新展开并停掉关闭计时器，确保点击后停留在可选择导出格式的状态。
+            MouseButtonEventHandler up = delegate(object sender, MouseButtonEventArgs args)
+            {
+                if (!header.IsEnabled) return;
+                close.Stop();
+                header.IsSubmenuOpen = true;
+            };
+            header.AddHandler(UIElement.MouseLeftButtonDownEvent, down, true);
+            header.AddHandler(UIElement.MouseLeftButtonUpEvent, up, true);
             header.MouseLeave += delegate { if (header.IsSubmenuOpen) close.Start(); };
             header.PreviewKeyDown += delegate(object sender, KeyEventArgs args)
             {
