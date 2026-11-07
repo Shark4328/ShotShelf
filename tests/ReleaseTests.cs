@@ -52,7 +52,7 @@ namespace ScreenLine.Tests
                     }
                     clipboard = snapshot;
                 }
-            try { await Run(); Console.WriteLine("1.0.5 专项验证：{0} 项通过", checks); }
+            try { await Run(); Console.WriteLine("1.0.6 专项验证：{0} 项通过", checks); }
                 catch (Exception error) { Console.WriteLine("专项验证失败：" + error); Environment.ExitCode = 1; }
                 finally
                 {
@@ -217,9 +217,10 @@ namespace ScreenLine.Tests
             var cleanupWindow = new CleanupWindow(store, delegate { return cleanupResult.RemainingBytes; }, delegate { return Task.FromResult(cleanupResult); });
             cleanupWindow.Show(); cleanupWindow.UpdateLayout();
             Click(cleanupWindow.SaveButton);
-            await Until(delegate { return cleanupWindow.StatusText.Text.Contains("已删除 2 张"); });
-            Check(cleanupWindow.StatusText.Text.Contains("释放 3 MB") && cleanupWindow.StatusText.Text.Contains("当前占用 7 MB")
-                && cleanupWindow.StatusText.Text.Contains("仍高于 1 MB"), "存储窗口显示删除数量、释放空间与剩余占用");
+            await Until(delegate { return cleanupWindow.StatusText.Text.Contains("已将 2 个文件"); });
+            Check(cleanupWindow.StatusText.Text.Contains("移到回收站") && cleanupWindow.StatusText.Text.Contains("清空回收站后才会释放磁盘空间")
+                && cleanupWindow.StatusText.Text.Contains("3 MB") && cleanupWindow.StatusText.Text.Contains("当前占用 7 MB")
+                && cleanupWindow.StatusText.Text.Contains("仍高于 1 MB"), "存储窗口显示回收站说明、移除数量与剩余占用");
             Check(cleanupWindow.Content is ScrollViewer, "存储窗口主体放入可滚动容器");
             cleanupWindow.Close();
             var slowWindow = new CleanupWindow(store, delegate { System.Threading.Thread.Sleep(500); return 0; },
@@ -334,8 +335,8 @@ namespace ScreenLine.Tests
             SetCursorPos((int)origin.X, (int)origin.Y); mouse_event(2, 0, 0, 0, UIntPtr.Zero); mouse_event(4, 0, 0, 0, UIntPtr.Zero); await Task.Delay(40);
             var input = ((Canvas)((Grid)capture.Content).Children[1]).Children.OfType<TextBox>().Single();
             Check(input.IsVisible && input.IsKeyboardFocused, "文字工具打开原地输入框");
-            input.Text = "截图标注 · 图架 1.0.5"; Click(capture.Tools["选择"]);
-            Check(capture.Surface.Marks.Last().Text == "截图标注 · 图架 1.0.5", "文字标注保留中文内容");
+            input.Text = "截图标注 · 图架 1.0.6"; Click(capture.Tools["选择"]);
+            Check(capture.Surface.Marks.Last().Text == "截图标注 · 图架 1.0.6", "文字标注保留中文内容");
             Export("区域截图与基础编辑", capture);
             await Drag(new Point(120, 160), new Point(140, 180));
             Check(capture.Selection == new Rect(140, 180, 620, 360), "拖动选区角点可调整截图边界");

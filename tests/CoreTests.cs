@@ -231,11 +231,11 @@ namespace ScreenLine.Tests
                 var restored = new StateStore(profile);
                 Check(!restored.State.AutoCleanEnabled && restored.State.AutoCleanDays == 7 && restored.State.AutoCleanThresholdMb == 1200);
             });
-            Run("自动清理：结果文字包含删除数量、释放空间与未达标提示", delegate
+            Run("自动清理：结果文字包含回收站说明、移除数量与未达标提示", delegate
             {
                 var result = new CleanupResult { Deleted = 2, FreedBytes = 3 * 1024 * 1024, RemainingBytes = 7 * 1024 * 1024, ReachedThreshold = false, ProtectedSkipped = 1 };
                 string text = CleanupRules.Describe(result, 5);
-                Check(text.Contains("已删除 2 张") && text.Contains("释放 3 MB") && text.Contains("当前占用 7 MB") && text.Contains("仍高于 5 MB 阈值"));
+                Check(text.Contains("已将 2 个文件") && text.Contains("移到回收站") && text.Contains("清空回收站后才会释放磁盘空间") && text.Contains("3 MB") && text.Contains("当前占用 7 MB") && text.Contains("仍高于 5 MB 阈值"));
                 string failedText = CleanupRules.Describe(new CleanupResult { Failed = true, RemainingBytes = 2 * 1024 * 1024 }, 5);
                 Check(failedText.Contains("清理检查未完成") && failedText.Contains("当前占用 2 MB"));
                 string busyText = CleanupRules.Describe(new CleanupResult { Busy = true }, 5);

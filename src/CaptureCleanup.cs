@@ -60,7 +60,7 @@ namespace ScreenLine
             if (result.Failed) return "清理检查未完成，请稍后重试；当前占用 " + FormatBytes(result.RemainingBytes) + "。详情见 error.log。";
             if (result.Skipped) return "自动清理已关闭，未删除文件。当前占用 " + FormatBytes(result.RemainingBytes) + "。";
             string text = result.Deleted > 0
-                ? "已删除 " + result.Deleted + " 张截图，释放 " + FormatBytes(result.FreedBytes) + "；当前占用 " + FormatBytes(result.RemainingBytes) + "。"
+                ? "已将 " + result.Deleted + " 个文件（" + FormatBytes(result.FreedBytes) + "）移到回收站，可在回收站恢复；清空回收站后才会释放磁盘空间。当前占用 " + FormatBytes(result.RemainingBytes) + "。"
                 : "没有删除文件；当前占用 " + FormatBytes(result.RemainingBytes) + "。";
             if (!result.ReachedThreshold)
                 text += "\n仍高于 " + thresholdMb + " MB 阈值"

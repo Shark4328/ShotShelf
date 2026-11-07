@@ -53,7 +53,7 @@ namespace ScreenLine
             EnabledBox = new CheckBox { Content = "自动清理截图", FontSize = 13, Foreground = LightTheme.Brush("#283343"), VerticalContentAlignment = VerticalAlignment.Center };
             AutomationProperties.SetAutomationId(EnabledBox, "cleanup-enabled");
             body.Children.Add(EnabledBox);
-            body.Children.Add(new TextBlock { Text = "开启后每小时检查一次，删除的截图不会进入回收站。", FontSize = 11, Foreground = LightTheme.Brush("#65717F"), Margin = new Thickness(22, 3, 0, 14) });
+            body.Children.Add(new TextBlock { Text = "开启后每小时检查一次，达到条件的旧文件会移到回收站，清空回收站后才会释放磁盘空间。", FontSize = 11, Foreground = LightTheme.Brush("#65717F"), Margin = new Thickness(22, 3, 0, 14) });
             var fields = new Grid();
             fields.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(118) });
             fields.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(96) });
