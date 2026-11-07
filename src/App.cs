@@ -19,9 +19,9 @@ using Forms = System.Windows.Forms;
 [assembly: AssemblyTitle("ShotShelf · 图架")]
 [assembly: AssemblyProduct("ShotShelf")]
 [assembly: AssemblyDescription("图架：把截图挂在屏幕上沿，随手复制、拖拽和保存。")]
-[assembly: AssemblyVersion("1.0.6.0")]
-[assembly: AssemblyFileVersion("1.0.6.0")]
-[assembly: AssemblyInformationalVersion("1.0.6")]
+[assembly: AssemblyVersion("1.0.7.0")]
+[assembly: AssemblyFileVersion("1.0.7.0")]
+[assembly: AssemblyInformationalVersion("1.0.7")]
 
 namespace ScreenLine
 {
