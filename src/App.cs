@@ -19,9 +19,9 @@ using Forms = System.Windows.Forms;
 [assembly: AssemblyTitle("ShotShelf · 图架")]
 [assembly: AssemblyProduct("ShotShelf")]
 [assembly: AssemblyDescription("图架：把截图挂在屏幕上沿，随手复制、拖拽和保存。")]
-[assembly: AssemblyVersion("1.0.4.0")]
-[assembly: AssemblyFileVersion("1.0.4.0")]
-[assembly: AssemblyInformationalVersion("1.0.4")]
+[assembly: AssemblyVersion("1.0.5.0")]
+[assembly: AssemblyFileVersion("1.0.5.0")]
+[assembly: AssemblyInformationalVersion("1.0.5")]
 
 namespace ScreenLine
 {
@@ -620,8 +620,7 @@ namespace ScreenLine
                     {
                         StartupFailure.Report(store, error);
                         StartupFailure.Dispose(store, controller); controller = null;
-                        MessageBox.Show(StartupFailure.Message, StartupFailure.Title, MessageBoxButton.OK, MessageBoxImage.Error);
-                        app.Shutdown(1);
+                        StartupFailure.Notify(delegate { app.Shutdown(1); });
                     }
                 };
                 app.Exit += delegate { if (controller != null) controller.Dispose(); };

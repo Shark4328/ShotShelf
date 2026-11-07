@@ -178,9 +178,22 @@ namespace ScreenLine
             try { size = file.Length; }
             catch (IOException) { }
             catch (UnauthorizedAccessException) { }
+            // 自动清理的文件改为移到回收站，可恢复；先确认文件未被占用，
+            // 避免后台清理触发系统错误对话框。
             try
             {
-                File.Delete(path);
+                using (File.Open(path, FileMode.Open, FileAccess.Read, FileShare.None)) { }
+            }
+            catch (Exception error)
+            {
+                result.Failures.Add(Path.GetFileName(path) + "：" + error.Message);
+                return false;
+            }
+            try
+            {
+                Microsoft.VisualBasic.FileIO.FileSystem.DeleteFile(path,
+                    Microsoft.VisualBasic.FileIO.UIOption.OnlyErrorDialogs,
+                    Microsoft.VisualBasic.FileIO.RecycleOption.SendToRecycleBin);
                 result.Deleted++;
                 result.FreedBytes += size;
                 result.RemainingBytes -= size;

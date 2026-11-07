@@ -99,7 +99,24 @@ namespace ScreenLine
                 catch (IOException) { }
                 catch (NotSupportedException) { }
                 catch (UnauthorizedAccessException) { }
+                catch (Exception error)
+                {
+                    if (!IsBadImage(error)) throw;
+                    // 单个损坏图片不再中断整批恢复，记录后继续处理后续文件。
+                    gallery.Store.Log(error);
+                }
             }
+        }
+
+        // 统一判定「单张图片本身损坏或无法解码」：这类错误只应跳过该文件，
+        // 不应中断整批恢复，也不应冒泡成启动失败或运行期未处理异常。
+        internal static bool IsBadImage(Exception error)
+        {
+            return error is InvalidDataException
+                || error is ArgumentException
+                || error is OverflowException
+                || error is System.Runtime.InteropServices.COMException
+                || error is NotSupportedException;
         }
 
         void AttachWatcher()
@@ -150,8 +167,9 @@ namespace ScreenLine
         async void ProcessFile(string path)
         {
             processing.Add(path);
-            bool complete = await Import(path, CaptureSource.Folder, true);
-            processing.Remove(path);
+            bool complete;
+            try { complete = await Import(path, CaptureSource.Folder, true); }
+            finally { processing.Remove(path); }
             if (disposed) return;
             if (complete) { seen.Add(path); pending.Remove(path); }
             else if (pending.ContainsKey(path) && ++pending[path] >= 20) pending.Remove(path);
@@ -187,6 +205,14 @@ namespace ScreenLine
             catch (IOException) { return false; }
             catch (NotSupportedException) { return false; }
             catch (UnauthorizedAccessException) { return false; }
+            catch (Exception error)
+            {
+                if (!IsBadImage(error)) throw;
+                // 与启动恢复使用同一分类：记录一次并跳过坏文件，不再反复重试。
+                gallery.Store.Log(error);
+                if (Failed != null) Failed("这张图片暂时无法读取，已跳过。");
+                return true;
+            }
             finally
             {
                 if (copy != null && !gallery.Collected.Any(i => FileRules.SameFile(i.Path, copy)) && File.Exists(copy)) File.Delete(copy);

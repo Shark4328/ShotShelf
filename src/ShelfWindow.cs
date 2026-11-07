@@ -361,7 +361,9 @@ namespace ScreenLine
             }
             hint.Visibility = gallery.Items.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
             helpTitle.Text = gallery.Store.State.AutoHang ? "截图会挂在这里" : "从图片篮子里挑几张挂上";
-            helpDetail.Text = gallery.Store.State.AutoHang ? "Win + PrtScn · 或开启剪贴板截图收集" : "截图会先收好，需要时再挂上绳子";
+            helpDetail.Text = gallery.Store.State.AutoHang
+                ? (gallery.Store.State.CollectClipboard ? "Win + PrtScn · 剪贴板截图会自动挂上" : "Win + PrtScn · 或开启剪贴板截图收集")
+                : "截图会先收好，需要时再挂上绳子";
             openBasket.Visibility = gallery.Store.State.AutoHang ? Visibility.Collapsed : Visibility.Visible;
             int pending = gallery.Collected.Count(i => !gallery.Contains(i.Path));
             if (pending > pendingPictures && Revealed && !flights.Any(flight => flight.Collecting || flight.Falling)) BasketReceived();
