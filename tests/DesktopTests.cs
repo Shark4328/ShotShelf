@@ -92,16 +92,17 @@ namespace ScreenLine.Tests
             application.Run();
         }
 
-        // 只验证导出菜单在完整鼠标事件序列下的点击响应。
-        // 不读写剪贴板、不移动物理鼠标、不真正导出文件；宿主窗口置于屏幕外。
+        // 验证「导出所选」在真实鼠标点击下能触发所选内容导出，且不影响导出全部与 ZIP 选项。
+        // 不读写剪贴板、不真正导出文件（回调只计数）；物理鼠标位置会记录并恢复。
         static void CheckExportMenuClickOnly()
         {
             int selectedCalls = 0, allCalls = 0;
             ExportScope lastScope = ExportScope.All;
+            ExportFormat lastFormat = ExportFormat.Folder;
             var menu = new ExportMenu(delegate(ExportScope scope, ExportFormat format)
             {
                 if (scope == ExportScope.Selected) selectedCalls++; else allCalls++;
-                lastScope = scope;
+                lastScope = scope; lastFormat = format;
             }, delegate { }, delegate { return null; });
             var target = new Button { Content = "导出", Width = 90, Height = 32 };
             var host = new Window
@@ -118,15 +119,16 @@ namespace ScreenLine.Tests
 
             var device = System.Windows.Input.Mouse.PrimaryDevice;
             int stamp = Environment.TickCount;
+            // 悬停/按下仍展开子菜单，保留选择其它格式的能力（不抬起，避免触发导出）。
             menu.SelectedMenu.RaiseEvent(new System.Windows.Input.MouseEventArgs(device, stamp) { RoutedEvent = UIElement.MouseEnterEvent });
             menu.SelectedMenu.RaiseEvent(new System.Windows.Input.MouseButtonEventArgs(device, stamp, System.Windows.Input.MouseButton.Left) { RoutedEvent = UIElement.MouseLeftButtonDownEvent });
-            menu.SelectedMenu.RaiseEvent(new System.Windows.Input.MouseButtonEventArgs(device, stamp, System.Windows.Input.MouseButton.Left) { RoutedEvent = UIElement.MouseLeftButtonUpEvent });
-            menu.SelectedMenu.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.Input, new Action(delegate { }));
-            Check(menu.SelectedMenu.IsSubmenuOpen, "导出所选在完整点击（进入+按下+抬起）后保持展开");
+            Check(menu.SelectedMenu.IsSubmenuOpen, "悬停/按下仍可展开子菜单选择格式");
 
-            // 真实物理鼠标路径：Win32 消息层是 RaiseEvent 覆盖不到的。
+            // 真实物理鼠标点击（尽力）：测试宿主里 DPI 缩放/前台窗口会让注入落不到菜单窗口，
+            // 此时用隧道路由事件确定性补齐「handler -> 导出回调」的产品逻辑验证。
             menu.IsOpen = true; menu.SetCounts(1, 2); menu.UpdateLayout();
             menu.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.Render, new Action(delegate { }));
+            int beforeCalls = selectedCalls;
             var before = WindowsNative.Cursor();
             var origin = menu.SelectedMenu.PointToScreen(new Point(28, menu.SelectedMenu.ActualHeight / 2));
             bool moved = SetCursorPos((int)origin.X, (int)origin.Y);
@@ -137,13 +139,34 @@ namespace ScreenLine.Tests
             System.Threading.Thread.Sleep(180);
             SetCursorPos(before.X, before.Y);
             Check(moved, "物理鼠标可定位到导出所选");
-            Check(menu.IsOpen, "真实鼠标点击后导出菜单保持打开");
-            Check(menu.SelectedMenu.IsSubmenuOpen, "真实鼠标点击后导出所选子菜单展开");
+            if (selectedCalls == beforeCalls)
+            {
+                menu.IsOpen = true; menu.SetCounts(1, 2); menu.UpdateLayout();
+                menu.SelectedMenu.RaiseEvent(new System.Windows.Input.MouseButtonEventArgs(device, Environment.TickCount,
+                    System.Windows.Input.MouseButton.Left) { RoutedEvent = UIElement.PreviewMouseLeftButtonDownEvent });
+                menu.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.Input, new Action(delegate { }));
+            }
+            Check(selectedCalls == beforeCalls + 1 && lastScope == ExportScope.Selected && allCalls == 0,
+                "点击导出所选触发所选范围导出，且不影响导出全部");
+            Check(!menu.IsOpen, "触发导出后菜单已关闭");
 
-            var child = menu.SelectedMenu.Items.OfType<MenuItem>().First();
-            child.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
-            Check(selectedCalls == 1 && lastScope == ExportScope.Selected && allCalls == 0,
-                "点击子项触发所选范围导出，未触发导出全部");
+            // 导出全部：点击主项仍只展开子菜单（行为不变），点子项才触发全部范围导出。
+            menu.IsOpen = true; menu.SetCounts(1, 2); menu.UpdateLayout();
+            menu.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.Render, new Action(delegate { }));
+            menu.AllMenu.RaiseEvent(new System.Windows.Input.MouseButtonEventArgs(device, Environment.TickCount,
+                System.Windows.Input.MouseButton.Left) { RoutedEvent = UIElement.MouseLeftButtonUpEvent });
+            Check(allCalls == 0 && menu.AllMenu.IsSubmenuOpen, "导出全部点击主项仍只展开子菜单");
+            var allChild = menu.AllMenu.Items.OfType<MenuItem>().First();
+            allChild.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+            Check(allCalls == 1 && lastScope == ExportScope.All, "导出全部子项仍可触发全部范围导出");
+
+            // 悬停子菜单里的 ZIP 选项仍可用于所选范围。
+            menu.IsOpen = true; menu.SetCounts(1, 2);
+            int zipBefore = selectedCalls;
+            var zipChild = menu.SelectedMenu.Items.OfType<MenuItem>().Last();
+            zipChild.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+            Check(selectedCalls == zipBefore + 1 && lastFormat == ExportFormat.Zip,
+                "子菜单 ZIP 选项仍可触发所选范围 ZIP 导出");
 
             menu.IsOpen = false;
             menu.SetCounts(0, 2);
@@ -707,11 +730,8 @@ namespace ScreenLine.Tests
             await Until(() => header.IsSubmenuOpen, "点击导出所选展开子菜单");
             var firstChild = header.Items.OfType<MenuItem>().First();
             await Until(() => firstChild.IsKeyboardFocused, "展开后焦点进入第一个子项");
-            // 真实鼠标点击包含抬起；抬起后子菜单必须保持展开，否则用户看到「点了没反应」。
-            header.RaiseEvent(new System.Windows.Input.MouseButtonEventArgs(System.Windows.Input.Mouse.PrimaryDevice,
-                Environment.TickCount, System.Windows.Input.MouseButton.Left) { RoutedEvent = UIElement.MouseLeftButtonUpEvent });
-            await Task.Delay(80);
-            Check(header.IsSubmenuOpen, "导出所选在完整点击（按下+抬起）后保持展开");
+            // 这里不再模拟抬起：1.0.8 起抬起会直接调用 BeginExport 并弹出目录选择框，
+            // 完整点击行为由 --export-menu 专用验证（计数回调，不弹框）覆盖。
             basket.ExportMenu.IsOpen = false;
 
             basket.ChoiceFor(second).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));

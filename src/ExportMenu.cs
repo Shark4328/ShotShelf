@@ -61,6 +61,8 @@ namespace ScreenLine
         internal readonly MenuItem AllMenu = new MenuItem { Header = "导出全部", Style = submenuStyle };
         internal readonly MenuItem OpenItem;
         readonly Func<string> lastOutputPath;
+        readonly Action<ExportScope, ExportFormat> exportAction;
+        bool exportPending;
         readonly Menu selectedShell = new Menu { Background = Brushes.Transparent, BorderThickness = new Thickness(0), Padding = new Thickness(0) };
         readonly Menu allShell = new Menu { Background = Brushes.Transparent, BorderThickness = new Thickness(0), Padding = new Thickness(0) };
         readonly DispatcherTimer close = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
@@ -79,6 +81,12 @@ namespace ScreenLine
             heading.Children.Add(detail); panel.Children.Add(heading);
             Build(SelectedMenu, selectedShell, ExportScope.Selected, export);
             Build(AllMenu, allShell, ExportScope.All, export);
+            // 真实鼠标点击时 MenuItem / Menu 的路由与鼠标捕获会让 MouseLeftButtonUp
+            // 无法到达 SelectedMenu（实测抬起计数为 0，即「点了没反应」的根因）。
+            // 在菜单根与「导出所选」项两处用隧道阶段拦截按下，覆盖不同鼠标捕获路径；
+            // 直接触发所选内容导出，不依赖 MenuItem 路由与子菜单 Popup。
+            exportAction = export;
+            AddHandler(UIElement.PreviewMouseLeftButtonDownEvent, new MouseButtonEventHandler(OnPreviewDown), true);
             panel.Children.Add(selectedShell); panel.Children.Add(allShell);
             panel.Children.Add(new Border { Height = 1, Background = LightTheme.Brush("#E8EBEF"), Margin = new Thickness(6, 4, 6, 4) });
             OpenItem = new MenuItem { Header = "打开上次导出位置", Style = choiceStyle, IsEnabled = false };
@@ -94,8 +102,34 @@ namespace ScreenLine
             PreviewKeyDown += delegate(object sender, KeyEventArgs args) { if (args.Key == Key.Escape) { IsOpen = false; args.Handled = true; } };
         }
 
+        // 命中「导出所选」行时直接触发所选导出。用可视树祖先链判断，不用坐标：
+        // 菜单打开时 Menu 会捕获鼠标，多显示器/DPI 下屏幕坐标换算也不可靠。
+        void OnPreviewDown(object sender, MouseButtonEventArgs args)
+        {
+            if (!IsOpen || !SelectedMenu.IsEnabled || exportPending) return;
+            DependencyObject source = args.OriginalSource as DependencyObject;
+            bool onSelectedRow = false;
+            for (int guard = 0; source != null && guard < 16 && !onSelectedRow; guard++)
+            {
+                if (ReferenceEquals(source, selectedShell) || ReferenceEquals(source, SelectedMenu)) onSelectedRow = true;
+                else source = VisualTreeHelper.GetParent(source);
+            }
+            if (!onSelectedRow) return;
+            exportPending = true;
+            close.Stop();
+            IsOpen = false;
+            Dispatcher.BeginInvoke(new Action(delegate
+            {
+                exportPending = false;
+                exportAction(ExportScope.Selected, ExportFormat.Folder);
+            }), System.Windows.Threading.DispatcherPriority.Input);
+            args.Handled = true;
+        }
+
         void Build(MenuItem header, Menu shell, ExportScope scope, Action<ExportScope, ExportFormat> export)
         {
+            if (scope == ExportScope.Selected)
+                header.AddHandler(UIElement.PreviewMouseLeftButtonDownEvent, new MouseButtonEventHandler(OnPreviewDown), true);
             header.Width = 190; header.FontFamily = FontFamily; header.FontSize = FontSize;
             AutomationProperties.SetName(header, scope == ExportScope.Selected ? "导出所选" : "导出全部");
             foreach (var entry in new[] {
@@ -131,7 +165,8 @@ namespace ScreenLine
                 args.Handled = true;
             };
             // 抬起阶段兜底：若 MenuItem 在抬起时切换关闭子菜单，或焦点转移让菜单消失，
-            // 这里重新展开并停掉关闭计时器，确保点击后停留在可选择导出格式的状态。
+            // 这里重新展开并停掉关闭计时器。触发导出由菜单根的隧道按下处理，
+            // 不再依赖抬起事件（实测它到达不了 header）。
             MouseButtonEventHandler up = delegate(object sender, MouseButtonEventArgs args)
             {
                 if (!header.IsEnabled) return;
